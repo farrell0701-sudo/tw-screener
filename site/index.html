@@ -45,6 +45,10 @@ input[type=number]{font-family:var(--f-num);width:84px;text-align:right}
 input[type=search]{width:100%}
 input:focus-visible,select:focus-visible,button:focus-visible,th:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .check{display:flex;align-items:center;gap:6px;font-size:13px}
+.crow{display:flex;align-items:center;gap:6px;justify-content:space-between;font-size:13px}
+.crow label{display:flex;align-items:center;gap:6px}
+.crow input[type=number]{width:64px}
+.sub{font-size:11.5px;color:var(--muted)}
 .btns{display:flex;gap:8px}
 button{font:13px var(--f-body);border-radius:5px;padding:6px 12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
@@ -110,6 +114,19 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <div class="row"><label for="ind">產業</label><select id="ind"><option value="">全部</option></select></div>
       </fieldset>
       <fieldset>
+        <legend>爆量貼軌(細部條件)</legend>
+        <div class="row"><label for="vb">訊號出現在 近幾日內</label>
+          <select id="vb"><option value="">不篩選</option><option>0</option><option>1</option><option>3</option><option>5</option><option>10</option><option>20</option></select></div>
+        <div class="crow"><label><input type="checkbox" id="vbBull" data-def="1" checked> 大盤多頭</label><span class="sub">加權 &gt; EMA60 且上彎</span></div>
+        <div class="crow"><label><input type="checkbox" id="vbS150" data-def="1" checked> EMA150 斜率 ≥</label><input type="number" id="vbS150v" data-def="0.2" value="0.2" step="0.05"></div>
+        <div class="crow"><label><input type="checkbox" id="vbBbg" data-def="1" checked> 上軌−MA5 差距 ≤ %</label><input type="number" id="vbBbgv" data-def="4" value="4" step="0.5"></div>
+        <div class="crow"><label><input type="checkbox" id="vbBbs" data-def="1" checked> 上軌10日斜率 &gt;</label><input type="number" id="vbBbsv" data-def="0" value="0" step="0.1"></div>
+        <div class="crow"><label><input type="checkbox" id="vbJp" data-def="1" checked> 開盤跳空 &gt; %</label><input type="number" id="vbJpv" data-def="0" value="0" step="0.5"></div>
+        <div class="crow"><label><input type="checkbox" id="vbM5" data-def="1" checked> MA5 上升</label></div>
+        <div class="crow"><label><input type="checkbox" id="vbVr" data-def="1" checked> 量 &gt; 20日均量 ×</label><input type="number" id="vbVrv" data-def="2.5" value="2.5" step="0.1"></div>
+        <div class="crow"><label><input type="checkbox" id="vbNh" data-def="0"> 收盤創 20 日新高</label></div>
+      </fieldset>
+      <fieldset>
         <legend>技術型態</legend>
         <div class="row"><label for="ab">A→B 突破 近幾日內</label>
           <select id="ab"><option value="">不限</option><option>0</option><option>1</option><option>3</option><option>5</option><option>10</option><option>20</option></select></div>
@@ -151,6 +168,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <p>大戶比例:集保戶股權分散表中,持股 400 張(或 1,000 張)以上級距合計佔集保庫存的比例。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
         <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
         <p>收斂後突破:一根放量或大振幅的長紅創 10 日新高後,4~25 根實體收斂、末段波動降到推升時的 60% 以下,收盤站上收斂區實體上緣;推升幅度 ≥20%。</p>
+        <p>爆量貼軌:EMA150 十日斜率 ≥0.2%/日、|布林上軌(20,2)−MA5| ÷ 收盤 ≤4%、開盤高於昨收、MA5 上升、當日成交量 > 20 日均量 2.5 倍,且當天加權指數為多頭(收盤 > EMA60 且 EMA60 二十日斜率 > 0)。上軌10日斜率 = (今日上軌 ÷ 10日前上軌 − 1) × 100 ÷ 10。每個條件都可以勾選開關、修改門檻;想用「新高版」就取消量能、勾選收盤創 20 日新高。預設組合在回測中 PF 約 2.9,出場為自最高收盤回落 8%。</p>
         <p>近5日波動 ≤ 平常 ×:近 5 日平均真實區間 ÷ 之前 60 日平均。市值以集保總股數 × 收盤價估算。資料僅供研究參考,不構成投資建議。</p>
       </details>
     </section>
@@ -161,7 +179,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 (() => {
 const $ = id => document.getElementById(id);
 const KEY = 'chiplens-filters-v1';
-const FIELDS = ['lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','vc','slope','res','e20','e60','q'];
+const FIELDS = ['lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','vb','vbBull','vbS150','vbS150v','vbBbg','vbBbgv','vbBbs','vbBbsv','vbJp','vbJpv','vbM5','vbVr','vbVrv','vbNh','vc','slope','res','e20','e60','q'];
 let DATA = null, rows = [], sortKey = '_delta', sortDir = -1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
@@ -211,7 +229,30 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 
 function streakOf(a){ let k=0; for(let i=a.length-1;i>0;i--){ if(a[i]!=null && a[i-1]!=null && a[i]>a[i-1]) k++; else break; } return k; }
 
+// 依使用者勾選的條件,在最近 21 根 K 棒內找最後一次符合的日子,回傳「幾日前」
+function vbCfg(){
+  const on = id => $(id).checked, v = id => num($(id).value);
+  return {bull:on('vbBull'), s150:on('vbS150')?v('vbS150v'):null, bbg:on('vbBbg')?v('vbBbgv'):null,
+          bbs:on('vbBbs')?v('vbBbsv'):null, jp:on('vbJp')?v('vbJpv'):null, m5:on('vbM5'),
+          vr:on('vbVr')?v('vbVrv'):null, nh:on('vbNh')};
+}
+let VBC = null;
+function vbDays(s){
+  const g = s.sg; if (!g || !g.s150) return null;
+  const C = VBC, n = g.s150.length;
+  const ge = (x,t) => t==null || (x!=null && x>=t), le = (x,t) => t==null || (x!=null && x<=t), gt = (x,t) => t==null || (x!=null && x>t);
+  for (let i=n-1;i>=0;i--){
+    if (C.bull && !g.bl[i]) continue;
+    if (!ge(g.s150[i],C.s150) || !le(g.bbg[i],C.bbg) || !gt(g.bbs[i],C.bbs) || !gt(g.jp[i],C.jp) || !gt(g.vr[i],C.vr)) continue;
+    if (C.m5 && !g.m5[i]) continue;
+    if (C.nh && !g.nh[i]) continue;
+    return n-1-i;
+  }
+  return null;
+}
+
 function derive(){
+  VBC = vbCfg();
   const lvl = $('lvl').value, w = Math.max(1, Math.min(12, num($('cmpw').value) || 4));
   for (const s of DATA.stocks){
     const a = s[lvl] || [];
@@ -221,6 +262,7 @@ function derive(){
     s._delta = (s._p != null && s._prev != null) ? +(s._p - s._prev).toFixed(2) : null;
     s._wk = (n > 1 && a[n-1] != null && a[n-2] != null) ? +(a[n-1]-a[n-2]).toFixed(2) : null;
     s._streak = streakOf(a);
+    s._vb = vbDays(s);
     const L = liveOn ? live[s.code] : null;
     s._c = L ? L.price : s.close;
     s._chg = L ? (L.chg ?? s.chg) : s.chg;
@@ -238,6 +280,7 @@ function pass(s){
   if ($('ind').value && s.industry !== $('ind').value) return false;
   if ($('ab').value !== '' && !(s.ab != null && s.ab <= Number($('ab').value))) return false;
   if ($('vcp').value !== '' && !(s.vcp != null && s.vcp <= Number($('vcp').value))) return false;
+  if ($('vb').value !== '' && !(s._vb != null && s._vb <= Number($('vb').value))) return false;
   if (f('vc') != null && !(s.vc != null && s.vc <= f('vc'))) return false;
   if (f('slope') != null && !(s.slope150 != null && s.slope150 >= f('slope'))) return false;
   if (f('res') != null && !(s.res120 != null && s.res120 <= f('res'))) return false;
@@ -307,6 +350,7 @@ function priceSpark(s){
 function techTags(s){
   const t = [];
   if (s.ab != null) t.push(`<span class="tag ${s.ab<=1?'hot':'on'}">A→B ${s.ab===0?'今日':s.ab+'日前'}</span>`);
+  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}">爆量貼軌 ${s._vb===0?'今日':s._vb+'日前'}</span>`);
   if (s.vcp != null) t.push(`<span class="tag ${s.vcp<=1?'hot':'on'}">收斂突破 ${s.vcp===0?'今日':s.vcp+'日前'}</span>`);
   if (s.res120 != null && s.res120 <= 0) t.push('<span class="tag on">創120日高</span>');
   const L = liveOn ? live[s.code] : null;
@@ -355,7 +399,7 @@ function init(d){
   $('ind').insertAdjacentHTML('beforeend', inds.map(i => `<option>${esc(i)}</option>`).join(''));
   const wk = d.weeks || [];
   const px = d.stocks.find(s => s.date)?.date || '—';
-  $('meta').innerHTML = `集保週資料 <b>${wk.length ? wk[0]+' ~ '+wk[wk.length-1] : '尚無'}</b><span>(${wk.length} 週)</span> 股價 <b>${px}</b> 更新於 <b>${esc(d.updated)}</b>`;
+  $('meta').innerHTML = `集保週資料 <b>${wk.length ? wk[0]+' ~ '+wk[wk.length-1] : '尚無'}</b><span>(${wk.length} 週)</span> 股價 <b>${px}</b> 更新於 <b>${esc(d.updated)}</b>` + (d.bull==null ? '' : ` 大盤 <b style="color:var(${d.bull?'--up':'--down'})">${d.bull?'多頭':'非多頭'}</b>`);
   if (d.demo) { $('demo').hidden = false; $('demo').textContent = d.demo; }
   try { liveOn = localStorage.getItem(LIVE_KEY) !== 'off'; } catch(e){}
   $('liveBtn').setAttribute('aria-pressed', liveOn);
@@ -367,7 +411,7 @@ $('apply').addEventListener('click', render);
 $('f').addEventListener('change', render);
 $('q').addEventListener('input', render);
 $('f').addEventListener('submit', e => { e.preventDefault(); render(); });
-$('reset').addEventListener('click', () => { FIELDS.forEach(id => { const el=$(id); if (el.type==='checkbox') el.checked=false; else if (el.tagName==='SELECT') el.selectedIndex=0; else el.value = id==='cmpw' ? 4 : id==='streak' ? 0 : ''; }); render(); });
+$('reset').addEventListener('click', () => { FIELDS.forEach(id => { const el=$(id); const d=el.dataset.def; if (el.type==='checkbox') el.checked = d==='1'; else if (el.tagName==='SELECT') el.selectedIndex=0; else el.value = d!==undefined ? d : id==='cmpw' ? 4 : id==='streak' ? 0 : ''; }); render(); });
 $('liveBtn').addEventListener('click', () => {
   liveOn = !liveOn; $('liveBtn').setAttribute('aria-pressed', liveOn);
   try { localStorage.setItem(LIVE_KEY, liveOn ? 'on' : 'off'); } catch(e){}

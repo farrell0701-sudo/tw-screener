@@ -65,5 +65,21 @@ def main() -> None:
             print(f"[fetch_prices] {period}: {min(i + BATCH, len(group))}/{len(group)}")
 
 
+def fetch_index() -> None:
+    """加權指數(^TWII)存成 data/prices/TAIEX.csv,給大盤多空判斷用。"""
+    d = download(["^TWII"], "3y")
+    if d.empty:
+        print("[fetch_prices] 加權指數下載失敗,沿用舊檔", file=sys.stderr)
+        return
+    if isinstance(d.columns, pd.MultiIndex):
+        d = d["^TWII"]
+    d = d.dropna(subset=["Close"])[["Open", "High", "Low", "Close", "Volume"]].copy()
+    d.index = pd.to_datetime(d.index).tz_localize(None).normalize()
+    d.index.name = "Date"
+    d.round(2).to_csv(OUT_DIR / "TAIEX.csv")
+    print(f"[fetch_prices] 加權指數 {len(d)} 筆")
+
+
 if __name__ == "__main__":
     main()
+    fetch_index()

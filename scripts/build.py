@@ -131,6 +131,77 @@ def vcp_signals(o, h, l, c, v, P):
     return sig
 
 
+# 爆量貼軌(對應 Pine「爆量貼軌 × 大盤多頭 v4」預設值)
+VB_P = dict(s150Min=0.2, gapMax=4.0, volMult=2.5, nhLen=20, needBull=True)
+BULL = {}   # 日期 -> 大盤是否多頭(加權指數 收盤>EMA60 且 EMA60 20日斜率>0)
+
+
+def load_bull():
+    f = DATA / "prices" / "TAIEX.csv"
+    if not f.exists():
+        return {}
+    d = pd.read_csv(f, index_col=0, parse_dates=True).dropna(subset=["Close"])
+    c = d["Close"].values.astype(float)
+    e = ema(c, 60)
+    s = np.full(len(e), np.nan)
+    s[20:] = e[20:] / e[:-20] - 1
+    return {dt: bool(c[i] > e[i] and s[i] > 0) for i, dt in enumerate(d.index) if i >= 80}
+
+
+def vb_signals(o, h, l, c, v, dates, P, mode):
+    """mode='vol':爆量版;mode='nh':以收盤創 nhLen 日新高取代爆量。"""
+    n = len(c)
+    e150 = ema(c, 150)
+    s150 = np.full(n, np.nan)
+    s150[10:] = (e150[10:] / e150[:-10] - 1) * 10
+    cs = pd.Series(c)
+    m20 = cs.rolling(20).mean()
+    bbu = (m20 + 2 * cs.rolling(20).std(ddof=0)).values
+    ma5 = cs.rolling(5).mean().values
+    gap = np.abs(bbu - ma5) / c * 100
+    pc = np.r_[np.nan, c[:-1]]
+    jump = (o / pc - 1) * 100
+    m5up = np.r_[False, ma5[1:] > ma5[:-1]]
+    sig = (s150 >= P["s150Min"]) & (gap <= P["gapMax"]) & (jump > 0) & m5up
+    if mode == "vol":
+        sig &= v > P["volMult"] * pd.Series(v).rolling(20).mean().values
+    else:
+        sig &= c > cs.rolling(P["nhLen"]).max().shift(1).values
+    if P["needBull"] and BULL:
+        sig &= np.array([BULL.get(d, False) for d in dates])
+    sig[: max(0, n - SIGNAL_LOOKBACK - 1)] = False
+    return sig, gap
+
+
+SG_W = SIGNAL_LOOKBACK + 1   # 輸出最近幾根的條件數值,讓網頁端依開關即時計算
+
+
+def vb_parts(o, c, v, dates):
+    """回傳最近 SG_W 根的各條件數值(網頁端依使用者的開關與門檻組合訊號)。"""
+    n = len(c)
+    e150 = ema(c, 150)
+    s150 = np.full(n, np.nan)
+    s150[10:] = (e150[10:] / e150[:-10] - 1) * 10
+    cs = pd.Series(c)
+    m20 = cs.rolling(20).mean()
+    bbu = (m20 + 2 * cs.rolling(20).std(ddof=0)).values
+    ma5 = cs.rolling(5).mean().values
+    bbg = np.abs(bbu - ma5) / c * 100
+    bbs = np.full(n, np.nan)
+    bbs[10:] = (bbu[10:] / bbu[:-10] - 1) * 10
+    pc = np.r_[np.nan, c[:-1]]
+    jp = (o / pc - 1) * 100
+    m5 = np.r_[False, ma5[1:] > ma5[:-1]]
+    vr = v / pd.Series(v).rolling(20).mean().values
+    nh = c > cs.rolling(20).max().shift(1).values
+    bl = np.array([BULL.get(d, False) for d in dates]) if BULL else np.ones(n, bool)
+    sl = slice(max(0, n - SG_W), n)
+    f = lambda a, d=2: [None if (x is None or not np.isfinite(x)) else round(float(x), d) for x in a[sl]]
+    b = lambda a: [1 if x else 0 for x in a[sl]]
+    return {"s150": f(s150, 3), "bbg": f(bbg), "bbs": f(bbs, 3), "jp": f(jp), "vr": f(vr),
+            "m5": b(m5), "nh": b(nh), "bl": b(bl)}
+
+
 AB_P = dict(lenH=60, minB=5, awin=30, minAGain=25, minALen=2, hiLen=20,
             slopeLen=150, slopeLb=10, slopeMin=0.2, clMin=0.75, vcN=5, vcM=60, vcK=1.0)
 VCP_P = dict(push=20)
@@ -167,6 +238,14 @@ def tech(df):
         "vcp": days_since(vcp_signals(o, h, l, c, v, VCP_P)),
         "spark": [round(x, 2) for x in c[-60:]],
     }
+    vb, gapArr = vb_signals(o, h, l, c, v, df.index, VB_P, "vol")
+    vbn, _ = vb_signals(o, h, l, c, v, df.index, VB_P, "nh")
+    out["vb"] = days_since(vb)
+    out["vbn"] = days_since(vbn)
+    out["sg"] = vb_parts(o, c, v, df.index)
+    out["bbg"] = None if np.isnan(gapArr[-1]) else round(float(gapArr[-1]), 2)
+    out["vr20"] = round(v[-1] / v[-20:].mean(), 2) if v[-20:].mean() > 0 else None
+    out["jump"] = round((o[-1] / c[-2] - 1) * 100, 2)
     return out
 
 
@@ -181,6 +260,8 @@ def clean(x):
 
 
 def main():
+    global BULL
+    BULL = load_bull()
     lst = pd.read_csv(DATA / "stock_list.csv", dtype=str).set_index("code")
     weeks, hold = load_tdcc()
     rows = []
@@ -208,7 +289,8 @@ def main():
         r["mcapRank"] = i
     tz = timezone(timedelta(hours=8))
     payload = {"updated": datetime.now(tz).strftime("%Y-%m-%d %H:%M"), "weeks": weeks,
-               "abParams": AB_P, "vcpParams": VCP_P, "stocks": rows}
+               "abParams": AB_P, "vcpParams": VCP_P, "vbParams": VB_P,
+               "bull": (BULL[max(BULL)] if BULL else None), "bullDate": (max(BULL).strftime("%Y-%m-%d") if BULL else None), "stocks": rows}
     import os
     if os.environ.get("DEMO_NOTE"):
         payload["demo"] = os.environ["DEMO_NOTE"]
