@@ -1,0 +1,383 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>籌碼雷達</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 左側固定篩選欄 + 右側結果表;手機時篩選欄折疊到上方 */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#18212b; --muted:#5d6b78; --line:#d9dfe5;
+  --accent:#1f5f8b; --accent-soft:#e3eef6;
+  --up:#d1352b; --down:#14834a; --flat:#6b7680;   /* 台股慣例:紅漲綠跌 */
+  --chip:#eef1f4; --warn:#a86400;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f151b; --panel:#151d25; --ink:#e3e9ef; --muted:#93a1ad; --line:#26323d;
+  --accent:#6fb3e0; --accent-soft:#16303f; --up:#ff6b5e; --down:#3ccf7e; --flat:#8d99a4;
+  --chip:#1d2731; --warn:#f0a940; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151b; --panel:#151d25; --ink:#e3e9ef; --muted:#93a1ad; --line:#26323d;
+  --accent:#6fb3e0; --accent-soft:#16303f; --up:#ff6b5e; --down:#3ccf7e; --flat:#8d99a4;
+  --chip:#1d2731; --warn:#f0a940; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--f-body)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px;max-width:1500px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 20px;margin-bottom:16px}
+h1{font-size:22px;margin:0;letter-spacing:.04em;text-wrap:balance}
+h1 small{font-weight:400;color:var(--muted);font-size:13px;margin-left:8px;letter-spacing:0}
+.meta{color:var(--muted);font-size:12.5px;display:flex;gap:14px;flex-wrap:wrap}
+.meta b{font-family:var(--f-num);font-weight:600;color:var(--ink)}
+.demo{background:var(--accent-soft);color:var(--accent);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:13px}
+.layout{display:grid;grid-template-columns:290px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+form{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:env(safe-area-inset-top,0px)}
+@media (max-width:900px){form{position:static}}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+legend{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.12em;margin-bottom:6px;padding:0}
+.row{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.row label{color:var(--ink);font-size:13px}
+input[type=number],select,input[type=search]{font:13px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:5px 7px;width:110px}
+input[type=number]{font-family:var(--f-num);width:84px;text-align:right}
+input[type=search]{width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible,th:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.check{display:flex;align-items:center;gap:6px;font-size:13px}
+.btns{display:flex;gap:8px}
+button{font:13px var(--f-body);border-radius:5px;padding:6px 12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.results{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.rhead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.count{font-size:13px;color:var(--muted)} .count b{font-family:var(--f-num);color:var(--ink);font-size:16px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:4px 10px;background:transparent}
+.seg button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);font-weight:700}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:1050px;font-size:13px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;vertical-align:middle}
+th{position:sticky;top:0;background:var(--panel);font-size:12px;color:var(--muted);font-weight:500;cursor:pointer;user-select:none}
+th[aria-sort=ascending]::after{content:" ▲";color:var(--accent)} th[aria-sort=descending]::after{content:" ▼";color:var(--accent)}
+th.l,td.l{text-align:left}
+tbody tr:hover{background:var(--accent-soft)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)}
+.stk a{color:var(--ink);text-decoration:none;font-weight:700} .stk a:hover{color:var(--accent);text-decoration:underline}
+.stk .code{font-family:var(--f-num);color:var(--muted);font-weight:400;margin-right:6px}
+.ind{color:var(--muted);font-size:12px}
+.mk{font-size:10.5px;border:1px solid var(--line);border-radius:3px;padding:0 4px;color:var(--muted);margin-left:6px}
+.tag{display:inline-block;font-size:11.5px;border-radius:999px;padding:1px 8px;margin:1px 2px;background:var(--chip);color:var(--muted)}
+.tag.hot{background:var(--up);color:var(--panel);font-weight:700}
+.tag.on{background:var(--accent-soft);color:var(--accent)}
+.streak{display:inline-block;min-width:22px;text-align:center;border-radius:4px;font-family:var(--f-num);font-weight:600;padding:0 4px}
+.streak.s3{background:var(--accent-soft);color:var(--accent)}
+svg.spark{display:block}
+.live{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#liveSt{font-size:12px;color:var(--muted)} #liveSt.err{color:var(--warn)}
+.lvdot{color:var(--accent);font-size:9px;margin-right:4px;vertical-align:middle}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.note{color:var(--muted);font-size:12px;padding:12px 14px;line-height:1.7}
+details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>籌碼雷達<small>集保大戶 × 技術型態</small></h1>
+    <div class="meta" id="meta">讀取資料中…</div>
+  </header>
+  <div class="demo" id="demo" hidden></div>
+
+  <div class="layout">
+    <form id="f" autocomplete="off">
+      <fieldset>
+        <legend>大戶籌碼</legend>
+        <div class="row"><label for="lvl">大戶門檻</label>
+          <select id="lvl"><option value="p400">400 張以上</option><option value="p1000">1,000 張以上</option></select></div>
+        <div class="row"><label for="streak">比例連續增加 ≥ 週</label><input type="number" id="streak" min="0" max="12" value="0"></div>
+        <div class="row"><label for="cmpw">與幾週前比較</label><input type="number" id="cmpw" min="1" max="12" value="4"></div>
+        <div class="row"><label for="dmin">比例變化 ≥ 百分點</label><input type="number" id="dmin" step="0.1" placeholder="不限"></div>
+        <div class="row"><label for="pmin">大戶比例 ≥ %</label><input type="number" id="pmin" step="1" placeholder="不限"></div>
+      </fieldset>
+      <fieldset>
+        <legend>股價與規模</legend>
+        <div class="row"><label for="pxmax">股價 ≤ 元</label><input type="number" id="pxmax" step="1" placeholder="不限"></div>
+        <div class="row"><label for="rank">市值排名</label>
+          <select id="rank"><option value="">不限</option><option>100</option><option>300</option><option>500</option><option>1000</option><option>2000</option></select></div>
+        <div class="row"><label for="mkt">市場</label>
+          <select id="mkt"><option value="">全部</option><option value="TWSE">上市</option><option value="TPEX">上櫃</option></select></div>
+        <div class="row"><label for="ind">產業</label><select id="ind"><option value="">全部</option></select></div>
+      </fieldset>
+      <fieldset>
+        <legend>技術型態</legend>
+        <div class="row"><label for="ab">A→B 突破 近幾日內</label>
+          <select id="ab"><option value="">不限</option><option>0</option><option>1</option><option>3</option><option>5</option><option>10</option><option>20</option></select></div>
+        <div class="row"><label for="vcp">收斂後突破 近幾日內</label>
+          <select id="vcp"><option value="">不限</option><option>0</option><option>1</option><option>3</option><option>5</option><option>10</option><option>20</option></select></div>
+        <div class="row"><label for="vc">近5日波動 ≤ 平常 ×</label><input type="number" id="vc" step="0.05" placeholder="不限"></div>
+        <div class="row"><label for="slope">EMA150 斜率 ≥ %/日</label><input type="number" id="slope" step="0.05" placeholder="不限"></div>
+        <div class="row"><label for="res">距 120 日高 ≤ %</label><input type="number" id="res" step="1" placeholder="不限"></div>
+        <label class="check"><input type="checkbox" id="e20"> 收盤在 EMA20 之上</label>
+        <label class="check"><input type="checkbox" id="e60"> 收盤在 EMA60 之上</label>
+      </fieldset>
+      <fieldset>
+        <legend>搜尋</legend>
+        <input type="search" id="q" placeholder="代號或名稱">
+      </fieldset>
+      <div class="btns"><button type="button" class="primary" id="apply">套用篩選</button><button type="button" id="reset">清除條件</button></div>
+    </form>
+
+    <section class="results">
+      <div class="rhead">
+        <div class="count" id="count"></div>
+        <div class="live">
+          <span id="liveSt"></span>
+          <div class="seg" role="group" aria-label="即時報價">
+            <button type="button" id="liveBtn" aria-pressed="true">即時報價</button>
+          </div>
+        </div>
+        <div class="seg" role="group" aria-label="週欄位顯示">
+          <button type="button" id="vRatio" aria-pressed="true">比例</button>
+          <button type="button" id="vDelta" aria-pressed="false">週變化</button>
+        </div>
+      </div>
+      <div class="tbl"><table>
+        <thead><tr id="thr"></tr></thead>
+        <tbody id="tb"></tbody>
+      </table></div>
+      <div class="empty" id="empty" hidden>沒有符合條件的股票。試著放寬連增週數或技術型態條件。</div>
+      <details class="note"><summary>欄位與型態說明</summary>
+        <p>大戶比例:集保戶股權分散表中,持股 400 張(或 1,000 張)以上級距合計佔集保庫存的比例。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
+        <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
+        <p>收斂後突破:一根放量或大振幅的長紅創 10 日新高後,4~25 根實體收斂、末段波動降到推升時的 60% 以下,收盤站上收斂區實體上緣;推升幅度 ≥20%。</p>
+        <p>近5日波動 ≤ 平常 ×:近 5 日平均真實區間 ÷ 之前 60 日平均。市值以集保總股數 × 收盤價估算。資料僅供研究參考,不構成投資建議。</p>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const KEY = 'chiplens-filters-v1';
+const FIELDS = ['lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','vc','slope','res','e20','e60','q'];
+let DATA = null, rows = [], sortKey = '_delta', sortDir = -1, view = 'ratio';
+
+// ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
+const QUOTE_URL = 'https://cool-wind-aee2tw-quote.farrell0701.workers.dev/quote'; // 留空字串 = 關閉即時功能
+const LIVE_MAX = 40;        // 每次最多查幾檔(富果免費版每分鐘 60 次)
+const LIVE_TTL = 45000;     // 同一檔 45 秒內不重複查
+const LIVE_EVERY = 60000;   // 盤中自動更新間隔(毫秒)
+const LIVE_KEY = 'chiplens-live-v1';
+let liveOn = true, liveBusy = false, liveErr = null, liveTimer = null;
+const live = {};            // 代號 -> {price, chg, vol, time, at}
+
+function marketOpen(){ const t = new Date(Date.now() + 8*36e5), d = t.getUTCDay(), m = t.getUTCHours()*60 + t.getUTCMinutes(); return d >= 1 && d <= 5 && m >= 540 && m <= 815; }
+function hhmmss(t){ if (t == null) return ''; const ms = t > 1e14 ? t/1000 : t; return new Date(ms + 8*36e5).toISOString().slice(11,19); }
+function liveStatus(msg){
+  const el = $('liveSt'); if (!el) return;
+  if (!QUOTE_URL) { el.textContent = ''; $('liveBtn').hidden = true; return; }
+  if (!liveOn) { el.textContent = '即時報價已關閉'; el.className = ''; return; }
+  const ts = Object.values(live).map(x => x.time).filter(Boolean), n = Object.keys(live).length;
+  const last = ts.length ? hhmmss(Math.max(...ts)) : '';
+  const base = msg || (marketOpen() ? '盤中每分鐘更新' : '非盤中,顯示最後成交');
+  el.textContent = base + (n ? ` · ${n} 檔` : '') + (last ? ` · 報價時間 ${last}` : '') + (liveErr ? ` · ⚠ ${liveErr}` : '');
+  el.className = liveErr ? 'err' : '';
+}
+async function fetchLive(){
+  if (!QUOTE_URL || !liveOn || liveBusy || !DATA || document.hidden) return;
+  const open = marketOpen(), now = Date.now();
+  const codes = rows.slice(0, LIVE_MAX).map(s => s.code).filter(c => { const x = live[c]; return !x || (open && now - x.at >= LIVE_TTL); });
+  if (!codes.length) { liveStatus(); return; }
+  liveBusy = true; liveStatus('更新中…');
+  try {
+    const r = await fetch(QUOTE_URL + '?codes=' + codes.join(','));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json(); let bad = 0;
+    for (const c of codes){ const q = j[c]; if (q && !q.err && q.price != null) live[c] = {...q, at: now}; else bad++; }
+    liveErr = bad ? `${bad} 檔取得失敗` : null;
+  } catch(e){ liveErr = '連線失敗 ' + e.message; }
+  liveBusy = false; render(true);
+}
+let liveDebounce = null;
+function liveSoon(){ clearTimeout(liveDebounce); liveDebounce = setTimeout(fetchLive, 700); }
+
+const num = v => (v === '' || v == null) ? null : Number(v);
+const fmt = (v, d=2) => v == null || Number.isNaN(v) ? '—' : Number(v).toFixed(d);
+const cls = v => v == null ? 'flat' : v > 0 ? 'up' : v < 0 ? 'down' : 'flat';
+const sign = (v, d=2) => v == null ? '—' : (v > 0 ? '+' : '') + Number(v).toFixed(d);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function streakOf(a){ let k=0; for(let i=a.length-1;i>0;i--){ if(a[i]!=null && a[i-1]!=null && a[i]>a[i-1]) k++; else break; } return k; }
+
+function derive(){
+  const lvl = $('lvl').value, w = Math.max(1, Math.min(12, num($('cmpw').value) || 4));
+  for (const s of DATA.stocks){
+    const a = s[lvl] || [];
+    const n = a.length;
+    s._p = n ? a[n-1] : null;
+    s._prev = n > w ? a[n-1-w] : null;
+    s._delta = (s._p != null && s._prev != null) ? +(s._p - s._prev).toFixed(2) : null;
+    s._wk = (n > 1 && a[n-1] != null && a[n-2] != null) ? +(a[n-1]-a[n-2]).toFixed(2) : null;
+    s._streak = streakOf(a);
+    const L = liveOn ? live[s.code] : null;
+    s._c = L ? L.price : s.close;
+    s._chg = L ? (L.chg ?? s.chg) : s.chg;
+  }
+}
+
+function pass(s){
+  const f = id => num($(id).value);
+  if (f('streak') && s._streak < f('streak')) return false;
+  if (f('dmin') != null && !(s._delta != null && s._delta >= f('dmin'))) return false;
+  if (f('pmin') != null && !(s._p != null && s._p >= f('pmin'))) return false;
+  if (f('pxmax') != null && !(s._c != null && s._c <= f('pxmax'))) return false;
+  if ($('rank').value && !(s.mcapRank && s.mcapRank <= Number($('rank').value))) return false;
+  if ($('mkt').value && s.market !== $('mkt').value) return false;
+  if ($('ind').value && s.industry !== $('ind').value) return false;
+  if ($('ab').value !== '' && !(s.ab != null && s.ab <= Number($('ab').value))) return false;
+  if ($('vcp').value !== '' && !(s.vcp != null && s.vcp <= Number($('vcp').value))) return false;
+  if (f('vc') != null && !(s.vc != null && s.vc <= f('vc'))) return false;
+  if (f('slope') != null && !(s.slope150 != null && s.slope150 >= f('slope'))) return false;
+  if (f('res') != null && !(s.res120 != null && s.res120 <= f('res'))) return false;
+  if ($('e20').checked && !s.aboveE20) return false;
+  if ($('e60').checked && !s.aboveE60) return false;
+  const q = $('q').value.trim();
+  if (q && !(s.code.includes(q) || (s.name||'').includes(q))) return false;
+  return true;
+}
+
+const COLS = [
+  {k:'code', t:'股票', l:true},
+  {k:'_c', t:'現價/收盤'},
+  {k:'_chg', t:'漲跌%'},
+  {k:'_p', t:'大戶比例%'},
+  {k:'_delta', t:'Δ 比較期'},
+  {k:'_streak', t:'連增週'},
+  {k:'_weeks', t:'近 13 週', nosort:true},
+  {k:'mcap', t:'市值(億)'},
+  {k:'_tech', t:'技術型態', l:true, nosort:true},
+  {k:'vc', t:'波動比'},
+  {k:'_px', t:'近 60 日', nosort:true},
+];
+
+function header(){
+  const w = num($('cmpw').value) || 4;
+  $('thr').innerHTML = COLS.map(c => {
+    const t = c.k === '_delta' ? `Δ ${w} 週` : c.t;
+    const s = c.nosort ? '' : ` tabindex="0" data-k="${c.k}" aria-sort="${sortKey===c.k ? (sortDir>0?'ascending':'descending') : 'none'}"`;
+    return `<th class="${c.l?'l':''}"${s}>${t}</th>`;
+  }).join('');
+  $('thr').querySelectorAll('th[data-k]').forEach(th => {
+    const go = () => { const k = th.dataset.k; if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = k==='code' ? 1 : -1; } render(); };
+    th.addEventListener('click', go);
+    th.addEventListener('keydown', e => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); go(); } });
+  });
+}
+
+function weekBars(s){
+  const a = s[$('lvl').value] || [];
+  if (!a.length) return '<span class="ind">—</span>';
+  const W = 104, H = 26, n = a.length, bw = W / 13;
+  if (view === 'ratio'){
+    const v = a.filter(x => x != null); if (!v.length) return '';
+    const lo = Math.min(...v), hi = Math.max(...v), span = Math.max(hi - lo, 0.2);
+    let bars = '';
+    a.forEach((x,i) => { if (x == null) return; const h = 3 + (x - lo) / span * (H - 4); const up = i>0 && a[i-1]!=null && x > a[i-1];
+      bars += `<rect x="${(13-n+i)*bw+1}" y="${H-h}" width="${bw-2}" height="${h}" rx="1" fill="var(${up?'--up':'--line'})"><title>${DATA.weeks[i]||''} ${x}%</title></rect>`; });
+    return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="近13週大戶比例">${bars}</svg>`;
+  }
+  const d = a.map((x,i) => (i>0 && x!=null && a[i-1]!=null) ? x - a[i-1] : null);
+  const m = Math.max(0.05, ...d.filter(x=>x!=null).map(Math.abs));
+  let bars = `<line x1="0" x2="${W}" y1="${H/2}" y2="${H/2}" stroke="var(--line)"/>`;
+  d.forEach((x,i) => { if (x == null) return; const h = Math.abs(x)/m*(H/2-1); bars += `<rect x="${(13-n+i)*bw+1}" y="${x>=0?H/2-h:H/2}" width="${bw-2}" height="${Math.max(h,0.8)}" fill="var(${x>=0?'--up':'--down'})"><title>${DATA.weeks[i]||''} ${sign(x)}</title></rect>`; });
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="近13週大戶比例週變化">${bars}</svg>`;
+}
+
+function priceSpark(s){
+  const a = s.spark; if (!a || a.length < 2) return '';
+  const W = 96, H = 26, lo = Math.min(...a), hi = Math.max(...a), sp = (hi - lo) || 1;
+  const pts = a.map((v,i) => `${(i/(a.length-1)*(W-4)+2).toFixed(1)},${(H-2-(v-lo)/sp*(H-4)).toFixed(1)}`).join(' ');
+  const last = pts.split(' ').pop().split(',');
+  const col = a[a.length-1] >= a[0] ? '--up' : '--down';
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="近60日收盤走勢"><polyline points="${pts}" fill="none" stroke="var(${col})" stroke-width="1.4"/><circle cx="${last[0]}" cy="${last[1]}" r="2" fill="var(${col})"/></svg>`;
+}
+
+function techTags(s){
+  const t = [];
+  if (s.ab != null) t.push(`<span class="tag ${s.ab<=1?'hot':'on'}">A→B ${s.ab===0?'今日':s.ab+'日前'}</span>`);
+  if (s.vcp != null) t.push(`<span class="tag ${s.vcp<=1?'hot':'on'}">收斂突破 ${s.vcp===0?'今日':s.vcp+'日前'}</span>`);
+  if (s.res120 != null && s.res120 <= 0) t.push('<span class="tag on">創120日高</span>');
+  const L = liveOn ? live[s.code] : null;
+  if (L && s.res120 > 0 && s.close && L.price > s.close * (1 + s.res120/100)) t.push('<span class="tag hot">盤中創120日高</span>');
+  if (s.aboveE20 && s.aboveE60) t.push('<span class="tag">站上20/60</span>');
+  return t.join('') || '<span class="ind">—</span>';
+}
+
+function tvLink(s){ return `https://tw.tradingview.com/chart/?symbol=${s.market==='TPEX'?'TPEX':'TWSE'}%3A${s.code}`; }
+
+function render(skipLive){
+  derive(); header();
+  rows = DATA.stocks.filter(pass);
+  const key = sortKey;
+  rows.sort((a,b) => {
+    const x = key==='code' ? a.code : a[key], y = key==='code' ? b.code : b[key];
+    if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+    return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+  });
+  const shown = rows.slice(0, 500);
+  $('tb').innerHTML = shown.map(s => `<tr>
+    <td class="l stk"><span class="code">${esc(s.code)}</span><a href="${tvLink(s)}" target="_blank" rel="noopener">${esc(s.name)}</a><span class="mk">${s.market==='TPEX'?'櫃':'市'}</span><div class="ind">${esc(s.industry)}</div></td>
+    <td class="num">${liveOn && live[s.code] ? `<span class="lvdot" title="報價時間 ${hhmmss(live[s.code].time)}">●</span>` : ''}${fmt(s._c)}${liveOn && live[s.code] && live[s.code].vol != null ? `<div class="ind num">量 ${Number(live[s.code].vol).toLocaleString()}</div>` : ''}</td>
+    <td class="num ${cls(s._chg)}">${sign(s._chg)}</td>
+    <td class="num">${fmt(s._p)}<div class="ind num ${cls(s._wk)}">${s._wk==null?'':'週 '+sign(s._wk)}</div></td>
+    <td class="num ${cls(s._delta)}">${sign(s._delta)}</td>
+    <td><span class="streak ${s._streak>=3?'s3':''}">${s._streak}</span></td>
+    <td>${weekBars(s)}</td>
+    <td class="num">${s.mcap==null?'—':Math.round(s.mcap).toLocaleString()}<div class="ind num">${s.mcapRank?'#'+s.mcapRank:''}</div></td>
+    <td class="l">${techTags(s)}</td>
+    <td class="num">${fmt(s.vc)}</td>
+    <td>${priceSpark(s)}</td></tr>`).join('');
+  $('empty').hidden = rows.length > 0;
+  $('count').innerHTML = `符合 <b>${rows.length}</b> 檔 / 共 ${DATA.stocks.length} 檔${rows.length>500?'(顯示前 500)':''}`;
+  save(); liveStatus();
+  if (skipLive !== true) liveSoon();
+}
+
+function save(){ try { const o = {}; FIELDS.forEach(id => { const el=$(id); o[id] = el.type==='checkbox' ? el.checked : el.value; }); o._view=view; localStorage.setItem(KEY, JSON.stringify(o)); } catch(e){} }
+function load(){ try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (!o) return; FIELDS.forEach(id => { const el=$(id); if (!(id in o)) return; if (el.type==='checkbox') el.checked = !!o[id]; else el.value = o[id]; }); if (o._view) setView(o._view, false); } catch(e){} }
+function setView(v, re=true){ view = v; $('vRatio').setAttribute('aria-pressed', v==='ratio'); $('vDelta').setAttribute('aria-pressed', v==='delta'); if (re) render(); }
+
+function init(d){
+  DATA = d;
+  const inds = [...new Set(d.stocks.map(s => s.industry).filter(Boolean))].sort();
+  $('ind').insertAdjacentHTML('beforeend', inds.map(i => `<option>${esc(i)}</option>`).join(''));
+  const wk = d.weeks || [];
+  const px = d.stocks.find(s => s.date)?.date || '—';
+  $('meta').innerHTML = `集保週資料 <b>${wk.length ? wk[0]+' ~ '+wk[wk.length-1] : '尚無'}</b><span>(${wk.length} 週)</span> 股價 <b>${px}</b> 更新於 <b>${esc(d.updated)}</b>`;
+  if (d.demo) { $('demo').hidden = false; $('demo').textContent = d.demo; }
+  try { liveOn = localStorage.getItem(LIVE_KEY) !== 'off'; } catch(e){}
+  $('liveBtn').setAttribute('aria-pressed', liveOn);
+  load(); render();
+  clearInterval(liveTimer); liveTimer = setInterval(() => { if (marketOpen()) fetchLive(); }, LIVE_EVERY);
+}
+
+$('apply').addEventListener('click', render);
+$('f').addEventListener('change', render);
+$('q').addEventListener('input', render);
+$('f').addEventListener('submit', e => { e.preventDefault(); render(); });
+$('reset').addEventListener('click', () => { FIELDS.forEach(id => { const el=$(id); if (el.type==='checkbox') el.checked=false; else if (el.tagName==='SELECT') el.selectedIndex=0; else el.value = id==='cmpw' ? 4 : id==='streak' ? 0 : ''; }); render(); });
+$('liveBtn').addEventListener('click', () => {
+  liveOn = !liveOn; $('liveBtn').setAttribute('aria-pressed', liveOn);
+  try { localStorage.setItem(LIVE_KEY, liveOn ? 'on' : 'off'); } catch(e){}
+  render();
+});
+$('vRatio').addEventListener('click', () => setView('ratio'));
+$('vDelta').addEventListener('click', () => setView('delta'));
+
+fetch('data/screen.json', {cache:'no-store'}).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(init)
+  .catch(e => { $('meta').textContent = '讀不到 data/screen.json(' + e.message + ')。請確認 GitHub Actions 已成功執行過一次。'; });
+})();
+</script>

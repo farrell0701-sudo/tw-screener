@@ -1,0 +1,60 @@
+name: 更新資料並發布網站
+
+on:
+  schedule:
+    # GitHub 排程使用 UTC。台灣時間 = UTC+8
+    - cron: "40 7 * * 1-5"   # 週一~五 15:40(台灣)更新股價
+    - cron: "15 2 * * 6"     # 週六 10:15(台灣)抓集保週資料
+  workflow_dispatch: {}       # 可在 Actions 頁面手動執行
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安裝套件
+        run: pip install -r requirements.txt
+
+      - name: 股票清單(每週一次即可,失敗沿用舊檔)
+        run: python scripts/fetch_list.py || true
+
+      - name: 集保股權分散表(已有本週資料會自動略過)
+        run: python scripts/fetch_tdcc.py || true
+
+      - name: 日K 股價
+        run: python scripts/fetch_prices.py
+
+      - name: 計算篩選資料
+        run: python scripts/build.py
+
+      - name: 提交資料
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data site/data
+          git commit -m "資料更新 $(date -u +'%Y-%m-%d %H:%M')" || echo "沒有變更"
+          git push
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
