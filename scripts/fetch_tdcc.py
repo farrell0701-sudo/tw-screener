@@ -16,8 +16,16 @@ import requests
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "data" / "tdcc"
+KEEP_WEEKS = 12   # 只保留最新 12 週,更早的檔案自動刪除
 URL = "https://opendata.tdcc.com.tw/getOD.ashx?id=1-5"
 HEADERS = {"User-Agent": "Mozilla/5.0 (tw-screener)"}
+
+
+def prune() -> None:
+    files = sorted(OUT_DIR.glob("*.csv"))
+    for f in files[:-KEEP_WEEKS]:
+        f.unlink()
+        print(f"[fetch_tdcc] 刪除超過 {KEEP_WEEKS} 週的舊檔 {f.name}")
 
 
 def main() -> None:
@@ -33,9 +41,11 @@ def main() -> None:
     out = OUT_DIR / f"{date}.csv"
     if out.exists():
         print(f"[fetch_tdcc] {date} 已存在,略過")
+        prune()
         return
     df[["code", "level", "holders", "shares", "pct"]].to_csv(out, index=False)
     print(f"[fetch_tdcc] {date}: {df['code'].nunique()} 檔 → {out}")
+    prune()
 
 
 if __name__ == "__main__":

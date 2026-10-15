@@ -97,24 +97,19 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
     <form id="f" autocomplete="off">
       <fieldset>
         <legend>顯示範圍</legend>
-        <div class="row"><label for="scope">只顯示</label>
-          <select id="scope" data-def="any">
-            <option value="any">爆量貼軌 或 A→B</option>
-            <option value="vb">只看 爆量貼軌</option>
-            <option value="ab">只看 A→B 突破</option>
-            <option value="both">兩者都出現</option>
-            <option value="all">全部股票</option>
-          </select></div>
+        <label class="check"><input type="checkbox" id="scAc" data-def="1" checked> Accum-v3 爆量貼軌</label>
+        <label class="check"><input type="checkbox" id="scAb" data-def="1" checked> A→B 突破</label>
+        <label class="check"><input type="checkbox" id="scAnd" data-def="0"> 須同時符合(不勾 = 符合任一)</label>
         <div class="row"><label for="scopeDays">訊號在近幾日內</label>
           <select id="scopeDays" data-def="5"><option>0</option><option>1</option><option>3</option><option selected>5</option><option>10</option><option>20</option></select></div>
-        <div class="sub">爆量貼軌的條件在下方「細部條件」調整;A→B 突破使用固定規則。</div>
+        <div class="sub">兩項都不勾 = 顯示全部股票。Accum-v3 的條件在下方「Accum-v3 條件」調整;A→B 突破使用固定規則。</div>
       </fieldset>
       <fieldset>
         <legend>大戶籌碼</legend>
         <div class="row"><label for="lvl">大戶門檻</label>
-          <select id="lvl"><option value="p400">400 張以上</option><option value="p1000">1,000 張以上</option></select></div>
-        <div class="row"><label for="streak">比例連續增加 ≥ 週</label><input type="number" id="streak" min="0" max="12" value="0"></div>
-        <div class="row"><label for="cmpw">與幾週前比較</label><input type="number" id="cmpw" min="1" max="12" value="4"></div>
+          <select id="lvl"><option value="p100">超過 100 張</option><option value="p400" selected>400 張以上</option><option value="p1000">1,000 張以上</option></select></div>
+        <div class="row"><label for="streak">比例連續增加 ≥ 週</label><input type="number" id="streak" min="0" max="11" value="0"></div>
+        <div class="row"><label for="cmpw">與幾週前比較</label><input type="number" id="cmpw" min="1" max="11" value="4"></div>
         <div class="row"><label for="dmin">比例變化 ≥ 百分點</label><input type="number" id="dmin" step="0.1" placeholder="不限"></div>
         <div class="row"><label for="pmin">大戶比例 ≥ %</label><input type="number" id="pmin" step="1" placeholder="不限"></div>
       </fieldset>
@@ -128,17 +123,29 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <div class="row"><label for="ind">產業</label><select id="ind"><option value="">全部</option></select></div>
       </fieldset>
       <fieldset>
-        <legend>爆量貼軌(細部條件)</legend>
-        <div class="row"><label for="vb">訊號出現在 近幾日內</label>
-          <select id="vb"><option value="">不篩選</option><option>0</option><option>1</option><option>3</option><option>5</option><option>10</option><option>20</option></select></div>
-        <div class="crow"><label><input type="checkbox" id="vbBull" data-def="1" checked> 大盤多頭</label><span class="sub">加權 &gt; EMA60 且上彎</span></div>
-        <div class="crow"><label><input type="checkbox" id="vbS150" data-def="1" checked> EMA150 斜率 ≥</label><input type="number" id="vbS150v" data-def="0.2" value="0.2" step="0.05"></div>
-        <div class="crow"><label><input type="checkbox" id="vbBbg" data-def="1" checked> 上軌−MA5 差距 ≤ %</label><input type="number" id="vbBbgv" data-def="4" value="4" step="0.5"></div>
-        <div class="crow"><label><input type="checkbox" id="vbBbs" data-def="1" checked> 上軌10日斜率 &gt;</label><input type="number" id="vbBbsv" data-def="0" value="0" step="0.1"></div>
-        <div class="crow"><label><input type="checkbox" id="vbJp" data-def="1" checked> 開盤跳空 &gt; %</label><input type="number" id="vbJpv" data-def="0" value="0" step="0.5"></div>
-        <div class="crow"><label><input type="checkbox" id="vbM5" data-def="1" checked> MA5 上升</label></div>
-        <div class="crow"><label><input type="checkbox" id="vbVr" data-def="1" checked> 量 &gt; 20日均量 ×</label><input type="number" id="vbVrv" data-def="2.5" value="2.5" step="0.1"></div>
-        <div class="crow"><label><input type="checkbox" id="vbNh" data-def="0"> 收盤創 20 日新高</label></div>
+        <legend>Accum-v3 條件(可勾選開關)</legend>
+        <div class="crow"><label><input type="checkbox" id="acBull" data-def="1" checked> 大盤多頭</label><span class="sub">加權 &gt; EMA60 且上彎</span></div>
+        <div class="crow"><label><input type="checkbox" id="acS150" data-def="1" checked> EMA150 斜率 ≥</label><input type="number" id="acS150v" data-def="0.1" value="0.1" step="0.05"></div>
+        <div class="crow"><label><input type="checkbox" id="acBbg" data-def="1" checked> 上軌−MA5 差距 ≤ %</label><input type="number" id="acBbgv" data-def="6" value="6" step="0.5"></div>
+        <div class="crow"><label><input type="checkbox" id="acBbs" data-def="1" checked> 上軌 5 日斜率 &gt;</label><input type="number" id="acBbsv" data-def="0" value="0" step="0.1"></div>
+        <div class="crow"><label><input type="checkbox" id="acNh" data-def="1" checked> 收盤創新高 天數</label>
+          <select id="acNhv" data-def="5" style="width:64px"><option>5</option><option>10</option><option>20</option></select></div>
+        <div class="crow"><label><input type="checkbox" id="acSpk" data-def="1" checked> 前 5 日無量能尖峰 ≤ 倍</label><input type="number" id="acSpkv" data-def="3" value="3" step="0.5"></div>
+        <div class="sub" style="margin-top:2px">分組(兩組擇一成立;都不勾 = 不限分組)</div>
+        <div class="crow"><label><input type="checkbox" id="acG1" data-def="1" checked> 爆量組:量 &gt; 均量 ×</label><input type="number" id="acVrv" data-def="2.5" value="2.5" step="0.1"></div>
+        <div class="crow"><span class="sub">　爆量前 5 日漲幅 &gt; %</span><input type="number" id="acPlo" data-def="2" value="2" step="1"></div>
+        <div class="crow"><span class="sub">　爆量前 5 日漲幅 ≤ %</span><input type="number" id="acPhi" data-def="25" value="25" step="1"></div>
+        <div class="crow"><label><input type="checkbox" id="acG2" data-def="1" checked> 非爆量組:近 5 日漲幅 &gt; %</label><input type="number" id="acNlo" data-def="0" value="0" step="1"></div>
+        <div class="crow"><span class="sub">　近 5 日漲幅 ≤ %</span><input type="number" id="acNhi" data-def="25" value="25" step="1"></div>
+        <div class="crow"><label><input type="checkbox" id="acSc" data-def="1" checked> 評分 ≥</label><input type="number" id="acScv" data-def="3" value="3" min="0" max="6" step="1"></div>
+        <details><summary>評分的 6 個門檻(各得 1 分)</summary>
+          <div class="crow"><span class="sub">ATR%(14) ≤</span><input type="number" id="scAtr" data-def="3.3" value="3.3" step="0.1"></div>
+          <div class="crow"><span class="sub">距 250 日高 ≤ %</span><input type="number" id="scDd" data-def="8" value="8" step="0.5"></div>
+          <div class="crow"><span class="sub">20 日振幅 ≤ %</span><input type="number" id="scRng" data-def="16.5" value="16.5" step="0.5"></div>
+          <div class="crow"><span class="sub">距 EMA60 ≤ %</span><input type="number" id="scD60" data-def="11.9" value="11.9" step="0.5"></div>
+          <div class="crow"><span class="sub">當日漲幅 ≤ %</span><input type="number" id="scR1" data-def="2.7" value="2.7" step="0.1"></div>
+          <div class="crow"><span class="sub">股本 ≥ 億元</span><input type="number" id="scCap" data-def="10" value="10" step="1"></div>
+        </details>
       </fieldset>
       <fieldset>
         <legend>技術型態</legend>
@@ -177,12 +184,13 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <thead><tr id="thr"></tr></thead>
         <tbody id="tb"></tbody>
       </table></div>
-      <div class="empty" id="empty" hidden>沒有符合條件的股票。可以把「訊號在近幾日內」放寬,或在「只顯示」選擇其他範圍。</div>
+      <div class="empty" id="empty" hidden>沒有符合條件的股票。可以把「訊號在近幾日內」放寬、降低評分門檻,或取消勾選顯示範圍。</div>
       <details class="note"><summary>欄位與型態說明</summary>
-        <p>大戶比例:集保戶股權分散表中,持股 400 張(或 1,000 張)以上級距合計佔集保庫存的比例。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
+        <p>大戶比例:集保戶股權分散表中,持股超過 100 張(100,001 股以上)、400 張以上或 1,000 張以上級距合計佔集保庫存的比例;網站只保留最新 12 週。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
         <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
         <p>收斂後突破:一根放量或大振幅的長紅創 10 日新高後,4~25 根實體收斂、末段波動降到推升時的 60% 以下,收盤站上收斂區實體上緣;推升幅度 ≥20%。</p>
-        <p>爆量貼軌:EMA150 十日斜率 ≥0.2%/日、|布林上軌(20,2)−MA5| ÷ 收盤 ≤4%、開盤高於昨收、MA5 上升、當日成交量 > 20 日均量 2.5 倍,且當天加權指數為多頭(收盤 > EMA60 且 EMA60 二十日斜率 > 0)。上軌10日斜率 = (今日上軌 ÷ 10日前上軌 − 1) × 100 ÷ 10。每個條件都可以勾選開關、修改門檻;想用「新高版」就取消量能、勾選收盤創 20 日新高。預設組合在回測中 PF 約 2.9,出場為自最高收盤回落 8%。</p>
+        <p>Accum-v3(囤貨後被發現):大盤多頭(加權收盤 &gt; EMA60 且 EMA60 二十日斜率 &gt; 0)、EMA150 十日斜率 ≥0.1%/日、|布林上軌(20,2)−MA5| ÷ 收盤 ≤6%、上軌 5 日斜率 &gt;0、收盤創 5 日新高、前 5 日單日量不超過 20 日均量 3 倍。分組:爆量組為當日量 &gt; 20 日均量 2.5 倍且爆量前 5 日漲幅 2~25%;非爆量組為近 5 日(含今日)漲幅 0~25%。每個條件都可勾選開關、修改門檻。</p>
+        <p>評分(0~6,各 1 分):ATR% ≤3.3、距 250 日高 ≤8%、20 日振幅 ≤16.5%、距 EMA60 ≤11.9%、當日漲幅 ≤2.7%、股本 ≥10 億(集保總股數 × 10 元)。表格依「Accum 分數」排序,同一天訊號多時先看分數高的;建議分數 ≥3 才進場、最多同時持有 8 檔、每檔 12.5% 資金、自最高收盤回落 8% 出場。回測的分數 ≥3 組在樣本外 2022~2026 年化約 28~32%,但評分條件是看過資料才挑的,實際表現可能較低。</p>
         <p>近5日波動 ≤ 平常 ×:近 5 日平均真實區間 ÷ 之前 60 日平均。市值以集保總股數 × 收盤價估算。資料僅供研究參考,不構成投資建議。</p>
       </details>
     </section>
@@ -192,9 +200,9 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const KEY = 'chiplens-filters-v1';
-const FIELDS = ['scope','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','vb','vbBull','vbS150','vbS150v','vbBbg','vbBbgv','vbBbs','vbBbsv','vbJp','vbJpv','vbM5','vbVr','vbVrv','vbNh','vc','slope','res','e20','e60','q'];
-let DATA = null, rows = [], sortKey = '_delta', sortDir = -1, view = 'ratio';
+const KEY = 'chiplens-filters-v2';
+const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acS150','acS150v','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acSc','acScv','scAtr','scDd','scRng','scD60','scR1','scCap','vc','slope','res','e20','e60','q'];
+let DATA = null, rows = [], sortKey = '_score', sortDir = -1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
 const QUOTE_URL = 'https://cool-wind-aee2tw-quote.farrell0701.workers.dev/quote'; // 留空字串 = 關閉即時功能
@@ -243,30 +251,46 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 
 function streakOf(a){ let k=0; for(let i=a.length-1;i>0;i--){ if(a[i]!=null && a[i-1]!=null && a[i]>a[i-1]) k++; else break; } return k; }
 
-// 依使用者勾選的條件,在最近 21 根 K 棒內找最後一次符合的日子,回傳「幾日前」
-function vbCfg(){
+// 依使用者勾選的條件,在最近 21 根 K 棒內找最後一次符合的日子,回傳 {d: 幾日前, sc: 當天分數}
+function acCfg(){
   const on = id => $(id).checked, v = id => num($(id).value);
-  return {bull:on('vbBull'), s150:on('vbS150')?v('vbS150v'):null, bbg:on('vbBbg')?v('vbBbgv'):null,
-          bbs:on('vbBbs')?v('vbBbsv'):null, jp:on('vbJp')?v('vbJpv'):null, m5:on('vbM5'),
-          vr:on('vbVr')?v('vbVrv'):null, nh:on('vbNh')};
+  return {bull:on('acBull'), s150:on('acS150')?v('acS150v'):null, bbg:on('acBbg')?v('acBbgv'):null,
+          bbs:on('acBbs')?v('acBbsv'):null, nh:on('acNh')?$('acNhv').value:null, spk:on('acSpk')?v('acSpkv'):null,
+          g1:on('acG1'), vr:v('acVrv'), plo:v('acPlo'), phi:v('acPhi'), g2:on('acG2'), nlo:v('acNlo'), nhi:v('acNhi'),
+          sc:on('acSc')?v('acScv'):null,
+          t:{atr:v('scAtr'), dd:v('scDd'), rng:v('scRng'), d60:v('scD60'), r1:v('scR1'), cap:v('scCap')}};
 }
-let VBC = null;
-function vbDays(s){
-  const g = s.sg; if (!g || !g.s150) return null;
-  const C = VBC, n = g.s150.length;
+let ACC = null;
+const okLe = (x,t) => x!=null && t!=null && x<=t;
+function acScore(s,g,i){
+  const T = ACC.t;
+  return (okLe(g.atr[i],T.atr)?1:0) + (okLe(g.ddh[i],T.dd)?1:0) + (okLe(g.rng[i],T.rng)?1:0)
+       + (okLe(g.d60[i],T.d60)?1:0) + (okLe(g.r1[i],T.r1)?1:0) + (s.cap!=null && T.cap!=null && s.cap>=T.cap?1:0);
+}
+function acFind(s){
+  const g = s.ac; if (!g || !g.s150) return null;
+  const C = ACC, n = g.s150.length;
   const ge = (x,t) => t==null || (x!=null && x>=t), le = (x,t) => t==null || (x!=null && x<=t), gt = (x,t) => t==null || (x!=null && x>t);
   for (let i=n-1;i>=0;i--){
     if (C.bull && !g.bl[i]) continue;
-    if (!ge(g.s150[i],C.s150) || !le(g.bbg[i],C.bbg) || !gt(g.bbs[i],C.bbs) || !gt(g.jp[i],C.jp) || !gt(g.vr[i],C.vr)) continue;
-    if (C.m5 && !g.m5[i]) continue;
-    if (C.nh && !g.nh[i]) continue;
-    return n-1-i;
+    if (!ge(g.s150[i],C.s150) || !le(g.bbg[i],C.bbg) || !gt(g.bbs[i],C.bbs) || !le(g.spk[i],C.spk)) continue;
+    if (C.nh && !g['nh'+C.nh][i]) continue;
+    if (C.g1 || C.g2){
+      const vr = g.vr[i]; if (vr == null) continue;
+      const big = vr > C.vr;
+      const okV = C.g1 && big && g.pre[i]!=null && g.pre[i] > C.plo && g.pre[i] <= C.phi;
+      const okN = C.g2 && !big && g.n5[i]!=null && g.n5[i] > C.nlo && g.n5[i] <= C.nhi;
+      if (!(okV || okN)) continue;
+    }
+    const sc = acScore(s,g,i);
+    if (C.sc != null && sc < C.sc) continue;
+    return {d:n-1-i, sc, grp:(g.vr[i]!=null && g.vr[i] > C.vr) ? '爆量' : '非爆量'};
   }
   return null;
 }
 
 function derive(){
-  VBC = vbCfg();
+  ACC = acCfg();
   const lvl = $('lvl').value, w = Math.max(1, Math.min(12, num($('cmpw').value) || 4));
   for (const s of DATA.stocks){
     const a = s[lvl] || [];
@@ -276,7 +300,7 @@ function derive(){
     s._delta = (s._p != null && s._prev != null) ? +(s._p - s._prev).toFixed(2) : null;
     s._wk = (n > 1 && a[n-1] != null && a[n-2] != null) ? +(a[n-1]-a[n-2]).toFixed(2) : null;
     s._streak = streakOf(a);
-    s._vb = vbDays(s);
+    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._grp = A ? A.grp : null;
     const L = liveOn ? live[s.code] : null;
     s._c = L ? L.price : s.close;
     s._chg = L ? (L.chg ?? s.chg) : s.chg;
@@ -284,15 +308,10 @@ function derive(){
 }
 
 function pass(s){
-  const sc = $('scope').value;
-  if (sc !== 'all'){
-    const D = Number($('scopeDays').value);
-    const hv = s._vb != null && s._vb <= D, ha = s.ab != null && s.ab <= D;
-    if (sc === 'any' && !(hv || ha)) return false;
-    if (sc === 'vb' && !hv) return false;
-    if (sc === 'ab' && !ha) return false;
-    if (sc === 'both' && !(hv && ha)) return false;
-  }
+  const D = Number($('scopeDays').value), sel = [];
+  if ($('scAc').checked) sel.push(s._vb != null && s._vb <= D);
+  if ($('scAb').checked) sel.push(s.ab != null && s.ab <= D);
+  if (sel.length && !($('scAnd').checked ? sel.every(Boolean) : sel.some(Boolean))) return false;
   const f = id => num($(id).value);
   if (f('streak') && s._streak < f('streak')) return false;
   if (f('dmin') != null && !(s._delta != null && s._delta >= f('dmin'))) return false;
@@ -303,7 +322,6 @@ function pass(s){
   if ($('ind').value && s.industry !== $('ind').value) return false;
   if ($('ab').value !== '' && !(s.ab != null && s.ab <= Number($('ab').value))) return false;
   if ($('vcp').value !== '' && !(s.vcp != null && s.vcp <= Number($('vcp').value))) return false;
-  if ($('vb').value !== '' && !(s._vb != null && s._vb <= Number($('vb').value))) return false;
   if (f('vc') != null && !(s.vc != null && s.vc <= f('vc'))) return false;
   if (f('slope') != null && !(s.slope150 != null && s.slope150 >= f('slope'))) return false;
   if (f('res') != null && !(s.res120 != null && s.res120 <= f('res'))) return false;
@@ -321,7 +339,8 @@ const COLS = [
   {k:'_p', t:'大戶比例%'},
   {k:'_delta', t:'Δ 比較期'},
   {k:'_streak', t:'連增週'},
-  {k:'_weeks', t:'近 13 週', nosort:true},
+  {k:'_weeks', t:'近 12 週', nosort:true},
+  {k:'_score', t:'Accum 分數'},
   {k:'mcap', t:'市值(億)'},
   {k:'_tech', t:'技術型態', l:true, nosort:true},
   {k:'vc', t:'波動比'},
@@ -345,20 +364,20 @@ function header(){
 function weekBars(s){
   const a = s[$('lvl').value] || [];
   if (!a.length) return '<span class="ind">—</span>';
-  const W = 104, H = 26, n = a.length, bw = W / 13;
+  const W = 104, H = 26, n = a.length, bw = W / 12;
   if (view === 'ratio'){
     const v = a.filter(x => x != null); if (!v.length) return '';
     const lo = Math.min(...v), hi = Math.max(...v), span = Math.max(hi - lo, 0.2);
     let bars = '';
     a.forEach((x,i) => { if (x == null) return; const h = 3 + (x - lo) / span * (H - 4); const up = i>0 && a[i-1]!=null && x > a[i-1];
-      bars += `<rect x="${(13-n+i)*bw+1}" y="${H-h}" width="${bw-2}" height="${h}" rx="1" fill="var(${up?'--up':'--line'})"><title>${DATA.weeks[i]||''} ${x}%</title></rect>`; });
-    return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="近13週大戶比例">${bars}</svg>`;
+      bars += `<rect x="${(12-n+i)*bw+1}" y="${H-h}" width="${bw-2}" height="${h}" rx="1" fill="var(${up?'--up':'--line'})"><title>${DATA.weeks[i]||''} ${x}%</title></rect>`; });
+    return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="近12週大戶比例">${bars}</svg>`;
   }
   const d = a.map((x,i) => (i>0 && x!=null && a[i-1]!=null) ? x - a[i-1] : null);
   const m = Math.max(0.05, ...d.filter(x=>x!=null).map(Math.abs));
   let bars = `<line x1="0" x2="${W}" y1="${H/2}" y2="${H/2}" stroke="var(--line)"/>`;
-  d.forEach((x,i) => { if (x == null) return; const h = Math.abs(x)/m*(H/2-1); bars += `<rect x="${(13-n+i)*bw+1}" y="${x>=0?H/2-h:H/2}" width="${bw-2}" height="${Math.max(h,0.8)}" fill="var(${x>=0?'--up':'--down'})"><title>${DATA.weeks[i]||''} ${sign(x)}</title></rect>`; });
-  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="近13週大戶比例週變化">${bars}</svg>`;
+  d.forEach((x,i) => { if (x == null) return; const h = Math.abs(x)/m*(H/2-1); bars += `<rect x="${(12-n+i)*bw+1}" y="${x>=0?H/2-h:H/2}" width="${bw-2}" height="${Math.max(h,0.8)}" fill="var(${x>=0?'--up':'--down'})"><title>${DATA.weeks[i]||''} ${sign(x)}</title></rect>`; });
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="近12週大戶比例週變化">${bars}</svg>`;
 }
 
 function priceSpark(s){
@@ -373,7 +392,7 @@ function priceSpark(s){
 function techTags(s){
   const t = [];
   if (s.ab != null) t.push(`<span class="tag ${s.ab<=1?'hot':'on'}">A→B ${s.ab===0?'今日':s.ab+'日前'}</span>`);
-  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}">爆量貼軌 ${s._vb===0?'今日':s._vb+'日前'}</span>`);
+  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}">Accum-v3 ${s._vb===0?'今日':s._vb+'日前'}・${s._grp}組</span>`);
   if (s.vcp != null) t.push(`<span class="tag ${s.vcp<=1?'hot':'on'}">收斂突破 ${s.vcp===0?'今日':s.vcp+'日前'}</span>`);
   if (s.res120 != null && s.res120 <= 0) t.push('<span class="tag on">創120日高</span>');
   const L = liveOn ? live[s.code] : null;
@@ -391,7 +410,10 @@ function render(skipLive){
   rows.sort((a,b) => {
     const x = key==='code' ? a.code : a[key], y = key==='code' ? b.code : b[key];
     if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
-    return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+    const c = (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+    if (c) return c;
+    const u = a._delta, w = b._delta;   // 同分時,大戶比例變化大的在前
+    return (u == null ? 1 : w == null ? -1 : (w - u));
   });
   const shown = rows.slice(0, 500);
   $('tb').innerHTML = shown.map(s => `<tr>
@@ -402,6 +424,7 @@ function render(skipLive){
     <td class="num ${cls(s._delta)}">${sign(s._delta)}</td>
     <td><span class="streak ${s._streak>=3?'s3':''}">${s._streak}</span></td>
     <td>${weekBars(s)}</td>
+    <td class="num">${s._score==null?'<span class="ind">—</span>':`<span class="streak ${s._score>=3?'s3':''}">${s._score}</span><div class="ind num">/ 6</div>`}</td>
     <td class="num">${s.mcap==null?'—':Math.round(s.mcap).toLocaleString()}<div class="ind num">${s.mcapRank?'#'+s.mcapRank:''}</div></td>
     <td class="l">${techTags(s)}</td>
     <td class="num">${fmt(s.vc)}</td>

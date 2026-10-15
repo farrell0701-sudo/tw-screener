@@ -11,7 +11,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 OUT = ROOT / "site" / "data" / "screen.json"
-WEEKS = 13
+WEEKS = 12   # 網站只保留最新 12 週集保資料
 SIGNAL_LOOKBACK = 20  # 回報最近幾根內的訊號
 
 
@@ -30,9 +30,11 @@ def load_tdcc():
         g = df.groupby("code")
         p400 = df[df.level.between(12, 15)].groupby("code").pct.sum()
         p1000 = df[df.level == 15].groupby("code").pct.sum()
+        p100 = df[df.level.between(10, 15)].groupby("code").pct.sum()   # 100,001 股以上 = 超過 100 張
         tot = df[df.level == 17].set_index("code")
         for code in g.groups:
-            r = recs.setdefault(code, {"p400": [], "p1000": [], "holders": [], "shares": None})
+            r = recs.setdefault(code, {"p100": [], "p400": [], "p1000": [], "holders": [], "shares": None})
+            r["p100"].append(round(float(p100.get(code, np.nan)), 2))
             r["p400"].append(round(float(p400.get(code, np.nan)), 2))
             r["p1000"].append(round(float(p1000.get(code, np.nan)), 2))
             r["holders"].append(int(tot.holders.get(code, 0)) if code in tot.index else None)
@@ -40,7 +42,7 @@ def load_tdcc():
                 r["shares"] = float(tot.shares.get(code))
     n = len(weeks)
     for r in recs.values():  # 補齊長度(新上市股票)
-        for k in ("p400", "p1000", "holders"):
+        for k in ("p100", "p400", "p1000", "holders"):
             r[k] = [None] * (n - len(r[k])) + r[k]
     return weeks, recs
 
@@ -131,8 +133,6 @@ def vcp_signals(o, h, l, c, v, P):
     return sig
 
 
-# 爆量貼軌(對應 Pine「爆量貼軌 × 大盤多頭 v4」預設值)
-VB_P = dict(s150Min=0.2, gapMax=4.0, volMult=2.5, nhLen=20, needBull=True)
 BULL = {}   # 日期 -> 大盤是否多頭(加權指數 收盤>EMA60 且 EMA60 20日斜率>0)
 
 
@@ -148,58 +148,44 @@ def load_bull():
     return {dt: bool(c[i] > e[i] and s[i] > 0) for i, dt in enumerate(d.index) if i >= 80}
 
 
-def vb_signals(o, h, l, c, v, dates, P, mode):
-    """mode='vol':爆量版;mode='nh':以收盤創 nhLen 日新高取代爆量。"""
-    n = len(c)
-    e150 = ema(c, 150)
-    s150 = np.full(n, np.nan)
-    s150[10:] = (e150[10:] / e150[:-10] - 1) * 10
-    cs = pd.Series(c)
-    m20 = cs.rolling(20).mean()
-    bbu = (m20 + 2 * cs.rolling(20).std(ddof=0)).values
-    ma5 = cs.rolling(5).mean().values
-    gap = np.abs(bbu - ma5) / c * 100
-    pc = np.r_[np.nan, c[:-1]]
-    jump = (o / pc - 1) * 100
-    m5up = np.r_[False, ma5[1:] > ma5[:-1]]
-    sig = (s150 >= P["s150Min"]) & (gap <= P["gapMax"]) & (jump > 0) & m5up
-    if mode == "vol":
-        sig &= v > P["volMult"] * pd.Series(v).rolling(20).mean().values
-    else:
-        sig &= c > cs.rolling(P["nhLen"]).max().shift(1).values
-    if P["needBull"] and BULL:
-        sig &= np.array([BULL.get(d, False) for d in dates])
-    sig[: max(0, n - SIGNAL_LOOKBACK - 1)] = False
-    return sig, gap
-
-
 SG_W = SIGNAL_LOOKBACK + 1   # 輸出最近幾根的條件數值,讓網頁端依開關即時計算
 
 
-def vb_parts(o, c, v, dates):
-    """回傳最近 SG_W 根的各條件數值(網頁端依使用者的開關與門檻組合訊號)。"""
+def ac_parts(o, h, l, c, v, dates):
+    """Accum-v3(囤貨後被發現)最近 SG_W 根的各條件與評分數值。
+    網頁端依使用者的勾選與門檻組合出訊號與分數,所以這裡只輸出原始數值。"""
     n = len(c)
+    cs, hs, ls, vs = pd.Series(c), pd.Series(h), pd.Series(l), pd.Series(v)
     e150 = ema(c, 150)
     s150 = np.full(n, np.nan)
-    s150[10:] = (e150[10:] / e150[:-10] - 1) * 10
-    cs = pd.Series(c)
+    s150[10:] = (e150[10:] / e150[:-10] - 1) * 10                    # %/日
     m20 = cs.rolling(20).mean()
     bbu = (m20 + 2 * cs.rolling(20).std(ddof=0)).values
     ma5 = cs.rolling(5).mean().values
     bbg = np.abs(bbu - ma5) / c * 100
     bbs = np.full(n, np.nan)
-    bbs[10:] = (bbu[10:] / bbu[:-10] - 1) * 10
-    pc = np.r_[np.nan, c[:-1]]
-    jp = (o / pc - 1) * 100
-    m5 = np.r_[False, ma5[1:] > ma5[:-1]]
-    vr = v / pd.Series(v).rolling(20).mean().values
-    nh = c > cs.rolling(20).max().shift(1).values
+    bbs[5:] = (bbu[5:] / bbu[:-5] - 1) * 100 / 5                      # 上軌 5 日斜率 %/日
+    vr = (vs / vs.rolling(20).mean()).values
+    spk = pd.Series(vr).rolling(5).max().shift(1).values              # 前 5 日(不含今日)最大量比
+    pre = ((cs.shift(1) / cs.shift(6) - 1) * 100).values              # 爆量組:爆量前 5 日漲幅
+    n5 = ((cs / cs.shift(5) - 1) * 100).values                        # 非爆量組:近 5 日漲幅(含今日)
     bl = np.array([BULL.get(d, False) for d in dates]) if BULL else np.ones(n, bool)
+    pc = np.r_[np.nan, c[:-1]]
+    atr = pd.Series(true_range(h, l, c)).ewm(alpha=1 / 14, adjust=False).mean().values
     sl = slice(max(0, n - SG_W), n)
-    f = lambda a, d=2: [None if (x is None or not np.isfinite(x)) else round(float(x), d) for x in a[sl]]
+    f = lambda a, d=2: [None if not np.isfinite(x) else round(float(x), d) for x in a[sl]]
     b = lambda a: [1 if x else 0 for x in a[sl]]
-    return {"s150": f(s150, 3), "bbg": f(bbg), "bbs": f(bbs, 3), "jp": f(jp), "vr": f(vr),
-            "m5": b(m5), "nh": b(nh), "bl": b(bl)}
+    out = {"s150": f(s150, 3), "bbg": f(bbg), "bbs": f(bbs, 3), "spk": f(spk), "vr": f(vr),
+           "pre": f(pre, 1), "n5": f(n5, 1), "bl": b(bl)}
+    for N in (5, 10, 20):
+        out[f"nh{N}"] = b(c > cs.rolling(N).max().shift(1).values)
+    # 評分用(6 項中的 5 項;股本在股票層級)
+    out["atr"] = f(atr / c * 100, 2)
+    out["ddh"] = f((1 - c / hs.rolling(250).max().values) * 100, 1)   # 距 250 日高點(正數=低於高點的 %)
+    out["rng"] = f((hs.rolling(20).max().values - ls.rolling(20).min().values) / c * 100, 1)
+    out["d60"] = f((c / ema(c, 60) - 1) * 100, 1)
+    out["r1"] = f((c / pc - 1) * 100, 2)
+    return out
 
 
 AB_P = dict(lenH=60, minB=5, awin=30, minAGain=25, minALen=2, hiLen=20,
@@ -238,14 +224,7 @@ def tech(df):
         "vcp": days_since(vcp_signals(o, h, l, c, v, VCP_P)),
         "spark": [round(x, 2) for x in c[-60:]],
     }
-    vb, gapArr = vb_signals(o, h, l, c, v, df.index, VB_P, "vol")
-    vbn, _ = vb_signals(o, h, l, c, v, df.index, VB_P, "nh")
-    out["vb"] = days_since(vb)
-    out["vbn"] = days_since(vbn)
-    out["sg"] = vb_parts(o, c, v, df.index)
-    out["bbg"] = None if np.isnan(gapArr[-1]) else round(float(gapArr[-1]), 2)
-    out["vr20"] = round(v[-1] / v[-20:].mean(), 2) if v[-20:].mean() > 0 else None
-    out["jump"] = round((o[-1] / c[-2] - 1) * 100, 2)
+    out["ac"] = ac_parts(o, h, l, c, v, df.index)
     return out
 
 
@@ -278,7 +257,9 @@ def main():
             continue
         r = {"code": code, "name": info["name"], "market": info["market"], "industry": info["industry"]}
         if hrec:
-            r.update(p400=hrec["p400"], p1000=hrec["p1000"], holders=hrec["holders"])
+            r.update(p100=hrec["p100"], p400=hrec["p400"], p1000=hrec["p1000"], holders=hrec["holders"])
+            if hrec["shares"]:
+                r["cap"] = round(hrec["shares"] * 10 / 1e8, 1)   # 股本(億元,面額 10 元)
             if t and hrec["shares"]:
                 r["mcap"] = round(t["close"] * hrec["shares"] / 1e8, 1)  # 億元
         if t:
@@ -289,7 +270,7 @@ def main():
         r["mcapRank"] = i
     tz = timezone(timedelta(hours=8))
     payload = {"updated": datetime.now(tz).strftime("%Y-%m-%d %H:%M"), "weeks": weeks,
-               "abParams": AB_P, "vcpParams": VCP_P, "vbParams": VB_P,
+               "abParams": AB_P, "vcpParams": VCP_P,
                "bull": (BULL[max(BULL)] if BULL else None), "bullDate": (max(BULL).strftime("%Y-%m-%d") if BULL else None), "stocks": rows}
     import os
     if os.environ.get("DEMO_NOTE"):
