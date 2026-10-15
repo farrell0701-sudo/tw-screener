@@ -137,6 +137,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <div class="crow"><span class="sub">　爆量前 5 日漲幅 ≤ %</span><input type="number" id="acPhi" data-def="25" value="25" step="1"></div>
         <div class="crow"><label><input type="checkbox" id="acG2" data-def="1" checked> 非爆量組:近 5 日漲幅 &gt; %</label><input type="number" id="acNlo" data-def="0" value="0" step="1"></div>
         <div class="crow"><span class="sub">　近 5 日漲幅 ≤ %</span><input type="number" id="acNhi" data-def="25" value="25" step="1"></div>
+        <div class="crow"><label><input type="checkbox" id="acTv" data-def="0"> 20 日均成交值 ≥ 億</label><input type="number" id="acTvv" data-def="1" value="1" step="0.5"></div>
         <div class="crow"><label><input type="checkbox" id="acSc" data-def="1" checked> 評分 ≥</label><input type="number" id="acScv" data-def="3" value="3" min="0" max="6" step="1"></div>
         <details><summary>評分的 6 個門檻(各得 1 分)</summary>
           <div class="crow"><span class="sub">ATR%(14) ≤</span><input type="number" id="scAtr" data-def="3.3" value="3.3" step="0.1"></div>
@@ -190,7 +191,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
         <p>收斂後突破:一根放量或大振幅的長紅創 10 日新高後,4~25 根實體收斂、末段波動降到推升時的 60% 以下,收盤站上收斂區實體上緣;推升幅度 ≥20%。</p>
         <p>Accum-v3(囤貨後被發現):大盤多頭(加權收盤 &gt; EMA60 且 EMA60 二十日斜率 &gt; 0)、EMA150 十日斜率 ≥0.1%/日、|布林上軌(20,2)−MA5| ÷ 收盤 ≤6%、上軌 5 日斜率 &gt;0、收盤創 5 日新高、前 5 日單日量不超過 20 日均量 3 倍。分組:爆量組為當日量 &gt; 20 日均量 2.5 倍且爆量前 5 日漲幅 2~25%;非爆量組為近 5 日(含今日)漲幅 0~25%。每個條件都可勾選開關、修改門檻。</p>
-        <p>評分(0~6,各 1 分):ATR% ≤3.3、距 250 日高 ≤8%、20 日振幅 ≤16.5%、距 EMA60 ≤11.9%、當日漲幅 ≤2.7%、股本 ≥10 億(集保總股數 × 10 元)。表格依「Accum 分數」排序,同一天訊號多時先看分數高的;建議分數 ≥3 才進場、最多同時持有 8 檔、每檔 12.5% 資金、自最高收盤回落 8% 出場。回測的分數 ≥3 組在樣本外 2022~2026 年化約 28~32%,但評分條件是看過資料才挑的,實際表現可能較低。</p>
+        <p>模型預測:用 2016~2021 年 6,621 筆 Accum-v3 交易訓練的機器學習模型,依訊號當天的 12 個數值(ATR%、距 250 日高、20 日振幅、距 EMA60、當日漲幅、股本、股價、20 日均成交值、量比、5 日與 20 日漲幅、EMA150 斜率)預測這筆交易的報酬。表格預設依模型預測由高到低排序:同一天訊號多時,先買排在前面的。模型偏好低價、低波動、還沒漲遠的股票;回測 2022~2026 年化約 37%(分數優先約 26%),加上 20 日均成交值 ≥1 億約 43%。模型不保證未來有效,資料不含已下市股票,實際表現可能較低。</p>
+        <p>評分(0~6,各 1 分):ATR% ≤3.3、距 250 日高 ≤8%、20 日振幅 ≤16.5%、距 EMA60 ≤11.9%、當日漲幅 ≤2.7%、股本 ≥10 億(集保總股數 × 10 元)。建議分數 ≥3 才進場、最多同時持有 8 檔、每檔 12.5% 資金、自最高收盤回落 8% 出場。回測的分數 ≥3 組在樣本外 2022~2026 年化約 28~32%,但評分條件是看過資料才挑的,實際表現可能較低。</p>
         <p>近5日波動 ≤ 平常 ×:近 5 日平均真實區間 ÷ 之前 60 日平均。市值以集保總股數 × 收盤價估算。資料僅供研究參考,不構成投資建議。</p>
       </details>
     </section>
@@ -200,9 +202,9 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const KEY = 'chiplens-filters-v2';
-const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acS150','acS150v','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acSc','acScv','scAtr','scDd','scRng','scD60','scR1','scCap','vc','slope','res','e20','e60','q'];
-let DATA = null, rows = [], sortKey = '_score', sortDir = -1, view = 'ratio';
+const KEY = 'chiplens-filters-v3';
+const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acS150','acS150v','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acTv','acTvv','acSc','acScv','scAtr','scDd','scRng','scD60','scR1','scCap','vc','slope','res','e20','e60','q'];
+let DATA = null, rows = [], sortKey = '_ml', sortDir = -1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
 const QUOTE_URL = 'https://cool-wind-aee2tw-quote.farrell0701.workers.dev/quote'; // 留空字串 = 關閉即時功能
@@ -257,7 +259,7 @@ function acCfg(){
   return {bull:on('acBull'), s150:on('acS150')?v('acS150v'):null, bbg:on('acBbg')?v('acBbgv'):null,
           bbs:on('acBbs')?v('acBbsv'):null, nh:on('acNh')?$('acNhv').value:null, spk:on('acSpk')?v('acSpkv'):null,
           g1:on('acG1'), vr:v('acVrv'), plo:v('acPlo'), phi:v('acPhi'), g2:on('acG2'), nlo:v('acNlo'), nhi:v('acNhi'),
-          sc:on('acSc')?v('acScv'):null,
+          sc:on('acSc')?v('acScv'):null, tv:on('acTv')?v('acTvv'):null,
           t:{atr:v('scAtr'), dd:v('scDd'), rng:v('scRng'), d60:v('scD60'), r1:v('scR1'), cap:v('scCap')}};
 }
 let ACC = null;
@@ -282,9 +284,10 @@ function acFind(s){
       const okN = C.g2 && !big && g.n5[i]!=null && g.n5[i] > C.nlo && g.n5[i] <= C.nhi;
       if (!(okV || okN)) continue;
     }
+    if (C.tv != null && !(g.tv && g.tv[i] != null && g.tv[i] >= C.tv)) continue;
     const sc = acScore(s,g,i);
     if (C.sc != null && sc < C.sc) continue;
-    return {d:n-1-i, sc, grp:(g.vr[i]!=null && g.vr[i] > C.vr) ? '爆量' : '非爆量'};
+    return {d:n-1-i, sc, ml:(g.ml ? g.ml[i] : null), grp:(g.vr[i]!=null && g.vr[i] > C.vr) ? '爆量' : '非爆量'};
   }
   return null;
 }
@@ -300,7 +303,7 @@ function derive(){
     s._delta = (s._p != null && s._prev != null) ? +(s._p - s._prev).toFixed(2) : null;
     s._wk = (n > 1 && a[n-1] != null && a[n-2] != null) ? +(a[n-1]-a[n-2]).toFixed(2) : null;
     s._streak = streakOf(a);
-    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._grp = A ? A.grp : null;
+    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._ml = A ? A.ml : null; s._grp = A ? A.grp : null;
     const L = liveOn ? live[s.code] : null;
     s._c = L ? L.price : s.close;
     s._chg = L ? (L.chg ?? s.chg) : s.chg;
@@ -340,6 +343,7 @@ const COLS = [
   {k:'_delta', t:'Δ 比較期'},
   {k:'_streak', t:'連增週'},
   {k:'_weeks', t:'近 12 週', nosort:true},
+  {k:'_ml', t:'模型預測'},
   {k:'_score', t:'Accum 分數'},
   {k:'mcap', t:'市值(億)'},
   {k:'_tech', t:'技術型態', l:true, nosort:true},
@@ -412,7 +416,7 @@ function render(skipLive){
     if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
     const c = (x > y ? 1 : x < y ? -1 : 0) * sortDir;
     if (c) return c;
-    const u = a._delta, w = b._delta;   // 同分時,大戶比例變化大的在前
+    const u = a._delta, w = b._delta;   // 相同時,大戶比例變化大的在前
     return (u == null ? 1 : w == null ? -1 : (w - u));
   });
   const shown = rows.slice(0, 500);
@@ -424,6 +428,7 @@ function render(skipLive){
     <td class="num ${cls(s._delta)}">${sign(s._delta)}</td>
     <td><span class="streak ${s._streak>=3?'s3':''}">${s._streak}</span></td>
     <td>${weekBars(s)}</td>
+    <td class="num">${s._ml==null?'<span class="ind">—</span>':`<b class="${cls(s._ml)}">${sign(s._ml,1)}%</b>`}</td>
     <td class="num">${s._score==null?'<span class="ind">—</span>':`<span class="streak ${s._score>=3?'s3':''}">${s._score}</span><div class="ind num">/ 6</div>`}</td>
     <td class="num">${s.mcap==null?'—':Math.round(s.mcap).toLocaleString()}<div class="ind num">${s.mcapRank?'#'+s.mcapRank:''}</div></td>
     <td class="l">${techTags(s)}</td>

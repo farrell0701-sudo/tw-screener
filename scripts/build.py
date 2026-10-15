@@ -185,7 +185,99 @@ def ac_parts(o, h, l, c, v, dates):
     out["rng"] = f((hs.rolling(20).max().values - ls.rolling(20).min().values) / c * 100, 1)
     out["d60"] = f((c / ema(c, 60) - 1) * 100, 1)
     out["r1"] = f((c / pc - 1) * 100, 2)
+    tv = (vs.rolling(20).mean() * cs).values                        # 20 日均成交值(元)
+    out["tv"] = f(tv / 1e8, 2)                                       # 億元,網頁的成交值門檻用
+    # 模型特徵(不輸出到網頁,只在 Python 端預測用)
+    sl_arr = lambda a: np.asarray(a, float)[sl]
+    out["_x"] = {"atrp": sl_arr(atr / c * 100), "dd250": sl_arr((c / hs.rolling(250).max().values - 1) * 100),
+                 "rng20": sl_arr((hs.rolling(20).max().values - ls.rolling(20).min().values) / c * 100),
+                 "d60": sl_arr((c / ema(c, 60) - 1) * 100), "ret1": sl_arr((c / pc - 1) * 100), "price": sl_arr(c),
+                 "tv": sl_arr(tv), "vr": sl_arr(vr), "ret5": sl_arr(n5), "ret20": sl_arr((cs / cs.shift(20) - 1).values * 100),
+                 "s150": sl_arr(s150)}
     return out
+
+
+# ───────────────────────── 機器學習排序 ─────────────────────────
+# 用 2016~2021 年 Accum-v3 樣本外交易(scripts/model_train.csv,6,621 筆)訓練,預測單筆報酬。
+# 同一天訊號多時,網頁依「模型預測」由高到低排序。回測:2022~2026 年化約 37%(分數優先約 26%)。
+ML_FEATS = ["atrp", "dd250", "rng20", "d60", "ret1", "cap", "price", "tv", "vr", "ret5", "ret20", "s150"]
+
+
+def train_model():
+    f = ROOT / "scripts" / "model_train.csv"
+    if not f.exists():
+        return None
+    try:
+        from sklearn.ensemble import HistGradientBoostingRegressor
+    except ImportError:
+        print("[build] 沒有安裝 scikit-learn,略過模型預測", file=sys.stderr)
+        return None
+    d = pd.read_csv(f)
+    m = HistGradientBoostingRegressor(max_depth=3, learning_rate=0.05, max_iter=200, min_samples_leaf=80, random_state=0)
+    return m.fit(d[ML_FEATS], d["r"].clip(-0.3, 1.0))
+
+
+def add_ml(rows, model):
+    X, owner = [], []
+    for r in rows:
+        x = r.get("ac", {}).pop("_x", None)
+        if x is None or model is None:
+            continue
+        n = len(x["atrp"])
+        for i in range(n):
+            X.append([x[k][i] if k != "cap" else (r.get("cap") if r.get("cap") is not None else np.nan) for k in ML_FEATS])
+        owner.append((r, n))
+    if not X:
+        return
+    pred = model.predict(np.array(X, float)) * 100
+    j = 0
+    for r, n in owner:
+        r["ac"]["ml"] = [round(float(v), 1) for v in pred[j:j + n]]
+        j += n
+
+
+# ── 機器學習排序模型(2016~2021 樣本外交易訓練,預測單筆報酬;樹狀結構存在 scripts/ml_model.json)
+_MP = Path(__file__).resolve().parent / "ml_model.json"
+MODEL = json.loads(_MP.read_text(encoding="utf-8")) if _MP.exists() else None
+TREES = None
+if MODEL:
+    TREES = [tuple(np.array(col, dtype=(float if j in (1, 6) else int)) for j, col in enumerate(zip(*t)))
+             for t in MODEL["trees"]]
+
+
+def ml_predict(X):
+    """X: (N, 12) 特徵矩陣,欄位順序同 MODEL['feats'];回傳預測報酬(小數)。"""
+    out = np.full(len(X), MODEL["base"])
+    rows = np.arange(len(X))
+    for f, th, mg, lft, rgt, leaf, val in TREES:
+        i = np.zeros(len(X), int)
+        for _ in range(20):
+            go = leaf[i] == 0
+            if not go.any():
+                break
+            v = X[rows, f[i]]
+            left = np.where(np.isnan(v), mg[i] == 1, v <= th[i])
+            i = np.where(go, np.where(left, lft[i], rgt[i]), i)
+        out += val[i]
+    return out
+
+
+def ml_feats(h, l, c, v):
+    """最近 SG_W 根的模型特徵(股本先填 NaN,之後在 main 補上)。"""
+    cs, hs, ls, vs = pd.Series(c), pd.Series(h), pd.Series(l), pd.Series(v)
+    atr = pd.Series(true_range(h, l, c)).ewm(alpha=1 / 14, adjust=False).mean().values
+    vma = vs.rolling(20).mean().values
+    e150 = ema(c, 150)
+    s150 = np.full(len(c), np.nan)
+    s150[10:] = (e150[10:] / e150[:-10] - 1) * 10
+    pc = np.r_[np.nan, c[:-1]]
+    F = {"atrp": atr / c * 100, "dd250": (c / hs.rolling(250).max().values - 1) * 100,
+         "rng20": (hs.rolling(20).max().values - ls.rolling(20).min().values) / c * 100,
+         "d60": (c / ema(c, 60) - 1) * 100, "ret1": (c / pc - 1) * 100, "cap": np.full(len(c), np.nan),
+         "price": c, "tv": vma * c, "vr": v / vma, "ret5": (cs / cs.shift(5) - 1).values * 100,
+         "ret20": (cs / cs.shift(20) - 1).values * 100, "s150": s150}
+    sl = slice(max(0, len(c) - SG_W), len(c))
+    return np.column_stack([F[k][sl] for k in MODEL["feats"]]).astype(float)
 
 
 AB_P = dict(lenH=60, minB=5, awin=30, minAGain=25, minALen=2, hiLen=20,
@@ -225,6 +317,10 @@ def tech(df):
         "spark": [round(x, 2) for x in c[-60:]],
     }
     out["ac"] = ac_parts(o, h, l, c, v, df.index)
+    tvs = pd.Series(v).rolling(20).mean().values * c / 1e8
+    out["ac"]["tv"] = [None if not np.isfinite(x) else round(float(x), 2) for x in tvs[max(0, n - SG_W):]]
+    if MODEL:
+        out["_mlX"] = ml_feats(h, l, c, v)
     return out
 
 
@@ -265,6 +361,26 @@ def main():
         if t:
             r.update(t)
         rows.append(r)
+    if MODEL:   # 一次算完全部股票、最近 21 根的模型分數(預測報酬 %)
+        mats, owners = [], []
+        for r in rows:
+            X = r.pop("_mlX", None)
+            if X is None:
+                continue
+            X[:, MODEL["feats"].index("cap")] = r.get("cap", np.nan) if r.get("cap") is not None else np.nan
+            mats.append(X)
+            owners.append(r)
+        if mats:
+            P = ml_predict(np.vstack(mats)) * 100
+            k = 0
+            for r, X in zip(owners, mats):
+                r["ac"]["ml"] = [round(float(x), 2) for x in P[k:k + len(X)]]
+                k += len(X)
+    model = train_model()
+    add_ml(rows, model)
+    for r in rows:
+        if "ac" in r:
+            r["ac"].pop("_x", None)
     caps = sorted([r for r in rows if r.get("mcap")], key=lambda r: -r["mcap"])
     for i, r in enumerate(caps, 1):
         r["mcapRank"] = i
