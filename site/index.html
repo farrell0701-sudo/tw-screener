@@ -96,6 +96,20 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
   <div class="layout">
     <form id="f" autocomplete="off">
       <fieldset>
+        <legend>顯示範圍</legend>
+        <div class="row"><label for="scope">只顯示</label>
+          <select id="scope" data-def="any">
+            <option value="any">爆量貼軌 或 A→B</option>
+            <option value="vb">只看 爆量貼軌</option>
+            <option value="ab">只看 A→B 突破</option>
+            <option value="both">兩者都出現</option>
+            <option value="all">全部股票</option>
+          </select></div>
+        <div class="row"><label for="scopeDays">訊號在近幾日內</label>
+          <select id="scopeDays" data-def="5"><option>0</option><option>1</option><option>3</option><option selected>5</option><option>10</option><option>20</option></select></div>
+        <div class="sub">爆量貼軌的條件在下方「細部條件」調整;A→B 突破使用固定規則。</div>
+      </fieldset>
+      <fieldset>
         <legend>大戶籌碼</legend>
         <div class="row"><label for="lvl">大戶門檻</label>
           <select id="lvl"><option value="p400">400 張以上</option><option value="p1000">1,000 張以上</option></select></div>
@@ -163,7 +177,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <thead><tr id="thr"></tr></thead>
         <tbody id="tb"></tbody>
       </table></div>
-      <div class="empty" id="empty" hidden>沒有符合條件的股票。試著放寬連增週數或技術型態條件。</div>
+      <div class="empty" id="empty" hidden>沒有符合條件的股票。可以把「訊號在近幾日內」放寬,或在「只顯示」選擇其他範圍。</div>
       <details class="note"><summary>欄位與型態說明</summary>
         <p>大戶比例:集保戶股權分散表中,持股 400 張(或 1,000 張)以上級距合計佔集保庫存的比例。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
         <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
@@ -179,7 +193,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 (() => {
 const $ = id => document.getElementById(id);
 const KEY = 'chiplens-filters-v1';
-const FIELDS = ['lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','vb','vbBull','vbS150','vbS150v','vbBbg','vbBbgv','vbBbs','vbBbsv','vbJp','vbJpv','vbM5','vbVr','vbVrv','vbNh','vc','slope','res','e20','e60','q'];
+const FIELDS = ['scope','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','vb','vbBull','vbS150','vbS150v','vbBbg','vbBbgv','vbBbs','vbBbsv','vbJp','vbJpv','vbM5','vbVr','vbVrv','vbNh','vc','slope','res','e20','e60','q'];
 let DATA = null, rows = [], sortKey = '_delta', sortDir = -1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
@@ -270,6 +284,15 @@ function derive(){
 }
 
 function pass(s){
+  const sc = $('scope').value;
+  if (sc !== 'all'){
+    const D = Number($('scopeDays').value);
+    const hv = s._vb != null && s._vb <= D, ha = s.ab != null && s.ab <= D;
+    if (sc === 'any' && !(hv || ha)) return false;
+    if (sc === 'vb' && !hv) return false;
+    if (sc === 'ab' && !ha) return false;
+    if (sc === 'both' && !(hv && ha)) return false;
+  }
   const f = id => num($(id).value);
   if (f('streak') && s._streak < f('streak')) return false;
   if (f('dmin') != null && !(s._delta != null && s._delta >= f('dmin'))) return false;
@@ -411,7 +434,7 @@ $('apply').addEventListener('click', render);
 $('f').addEventListener('change', render);
 $('q').addEventListener('input', render);
 $('f').addEventListener('submit', e => { e.preventDefault(); render(); });
-$('reset').addEventListener('click', () => { FIELDS.forEach(id => { const el=$(id); const d=el.dataset.def; if (el.type==='checkbox') el.checked = d==='1'; else if (el.tagName==='SELECT') el.selectedIndex=0; else el.value = d!==undefined ? d : id==='cmpw' ? 4 : id==='streak' ? 0 : ''; }); render(); });
+$('reset').addEventListener('click', () => { FIELDS.forEach(id => { const el=$(id); const d=el.dataset.def; if (el.type==='checkbox') el.checked = d==='1'; else if (el.tagName==='SELECT') el.value = d!==undefined ? d : el.options[0].value; else el.value = d!==undefined ? d : id==='cmpw' ? 4 : id==='streak' ? 0 : ''; }); render(); });
 $('liveBtn').addEventListener('click', () => {
   liveOn = !liveOn; $('liveBtn').setAttribute('aria-pressed', liveOn);
   try { localStorage.setItem(LIVE_KEY, liveOn ? 'on' : 'off'); } catch(e){}
