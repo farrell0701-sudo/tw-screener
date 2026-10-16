@@ -133,19 +133,21 @@ def vcp_signals(o, h, l, c, v, P):
     return sig
 
 
-BULL = {}   # 日期 -> 大盤是否多頭(加權指數 收盤>EMA60 且 EMA60 20日斜率>0)
+BULL = {}   # 日期 -> 大盤多頭(v3c 最新版:加權指數 EMA60 20 日斜率 > 0)
+ABOVE = {}  # 日期 -> 加權收盤 > EMA60(舊版 v3C 的額外條件,網頁可選)
 
 
 def load_bull():
     f = DATA / "prices" / "TAIEX.csv"
     if not f.exists():
-        return {}
+        return {}, {}
     d = pd.read_csv(f, index_col=0, parse_dates=True).dropna(subset=["Close"])
     c = d["Close"].values.astype(float)
     e = ema(c, 60)
     s = np.full(len(e), np.nan)
     s[20:] = e[20:] / e[:-20] - 1
-    return {dt: bool(c[i] > e[i] and s[i] > 0) for i, dt in enumerate(d.index) if i >= 80}
+    rng = [(i, dt) for i, dt in enumerate(d.index) if i >= 80]
+    return {dt: bool(s[i] > 0) for i, dt in rng}, {dt: bool(c[i] > e[i]) for i, dt in rng}
 
 
 SG_W = SIGNAL_LOOKBACK + 1   # 輸出最近幾根的條件數值,讓網頁端依開關即時計算
@@ -159,6 +161,9 @@ def ac_parts(o, h, l, c, v, dates):
     e150 = ema(c, 150)
     s150 = np.full(n, np.nan)
     s150[10:] = (e150[10:] / e150[:-10] - 1) * 10                    # %/日
+    e200 = ema(c, 200)
+    s200 = np.full(n, np.nan)
+    s200[10:] = (e200[10:] / e200[:-10] - 1) * 10                    # v3c 最新版用 EMA200
     m20 = cs.rolling(20).mean()
     bbu = (m20 + 2 * cs.rolling(20).std(ddof=0)).values
     ma5 = cs.rolling(5).mean().values
@@ -170,12 +175,13 @@ def ac_parts(o, h, l, c, v, dates):
     pre = ((cs.shift(1) / cs.shift(6) - 1) * 100).values              # 爆量組:爆量前 5 日漲幅
     n5 = ((cs / cs.shift(5) - 1) * 100).values                        # 非爆量組:近 5 日漲幅(含今日)
     bl = np.array([BULL.get(d, False) for d in dates]) if BULL else np.ones(n, bool)
+    ab = np.array([ABOVE.get(d, False) for d in dates]) if ABOVE else np.ones(n, bool)
     pc = np.r_[np.nan, c[:-1]]
     atr = pd.Series(true_range(h, l, c)).ewm(alpha=1 / 14, adjust=False).mean().values
     sl = slice(max(0, n - SG_W), n)
     f = lambda a, d=2: [None if not np.isfinite(x) else round(float(x), d) for x in a[sl]]
     b = lambda a: [1 if x else 0 for x in a[sl]]
-    out = {"s150": f(s150, 3), "bbg": f(bbg), "bbs": f(bbs, 3), "spk": f(spk), "vr": f(vr),
+    out = {"s150": f(s150, 3), "s200": f(s200, 3), "ab": b(ab), "bbg": f(bbg), "bbs": f(bbs, 3), "spk": f(spk), "vr": f(vr),
            "pre": f(pre, 1), "n5": f(n5, 1), "bl": b(bl)}
     for N in (5, 10, 20):
         out[f"nh{N}"] = b(c > cs.rolling(N).max().shift(1).values)
@@ -335,8 +341,8 @@ def clean(x):
 
 
 def main():
-    global BULL
-    BULL = load_bull()
+    global BULL, ABOVE
+    BULL, ABOVE = load_bull()
     lst = pd.read_csv(DATA / "stock_list.csv", dtype=str).set_index("code")
     weeks, hold = load_tdcc()
     rows = []

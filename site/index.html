@@ -97,12 +97,12 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
     <form id="f" autocomplete="off">
       <fieldset>
         <legend>顯示範圍</legend>
-        <label class="check"><input type="checkbox" id="scAc" data-def="1" checked> Accum-v3 爆量貼軌</label>
+        <label class="check"><input type="checkbox" id="scAc" data-def="1" checked> Accum-v3c</label>
         <label class="check"><input type="checkbox" id="scAb" data-def="1" checked> A→B 突破</label>
         <label class="check"><input type="checkbox" id="scAnd" data-def="0"> 須同時符合(不勾 = 符合任一)</label>
         <div class="row"><label for="scopeDays">訊號在近幾日內</label>
           <select id="scopeDays" data-def="5"><option>0</option><option>1</option><option>3</option><option selected>5</option><option>10</option><option>20</option></select></div>
-        <div class="sub">兩項都不勾 = 顯示全部股票。Accum-v3 的條件在下方「Accum-v3 條件」調整;A→B 突破使用固定規則。</div>
+        <div class="sub">兩項都不勾 = 顯示全部股票。Accum-v3c 的條件在下方「Accum-v3c 條件」調整;A→B 突破使用固定規則。</div>
       </fieldset>
       <fieldset>
         <legend>大戶籌碼</legend>
@@ -123,28 +123,35 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <div class="row"><label for="ind">產業</label><select id="ind"><option value="">全部</option></select></div>
       </fieldset>
       <fieldset>
-        <legend>Accum-v3 條件(可勾選開關)</legend>
-        <div class="crow"><label><input type="checkbox" id="acBull" data-def="1" checked> 大盤多頭</label><span class="sub">加權 &gt; EMA60 且上彎</span></div>
-        <div class="crow"><label><input type="checkbox" id="acS150" data-def="1" checked> EMA150 斜率 ≥</label><input type="number" id="acS150v" data-def="0.1" value="0.1" step="0.05"></div>
-        <div class="crow"><label><input type="checkbox" id="acBbg" data-def="1" checked> 上軌−MA5 差距 ≤ %</label><input type="number" id="acBbgv" data-def="6" value="6" step="0.5"></div>
-        <div class="crow"><label><input type="checkbox" id="acBbs" data-def="1" checked> 上軌 5 日斜率 &gt;</label><input type="number" id="acBbsv" data-def="0" value="0" step="0.1"></div>
+        <legend>Accum-v3c 條件(可勾選開關)</legend>
+        <div class="crow"><label><input type="checkbox" id="acBull" data-def="1" checked> 大盤多頭</label><span class="sub">加權 EMA60 二十日上彎</span></div>
+        <div class="crow"><label><input type="checkbox" id="acAbove" data-def="0"> 也要加權 &gt; EMA60</label><span class="sub">舊版 v3C</span></div>
+        <div class="crow"><label><input type="checkbox" id="acS200" data-def="1" checked> EMA200 斜率 ≥</label><input type="number" id="acS200v" data-def="0.1" value="0.1" step="0.05"></div>
+        <div class="crow"><label><input type="checkbox" id="acS150" data-def="0"> EMA150 斜率 ≥</label><input type="number" id="acS150v" data-def="0.1" value="0.1" step="0.05"></div>
         <div class="crow"><label><input type="checkbox" id="acNh" data-def="1" checked> 收盤創新高 天數</label>
           <select id="acNhv" data-def="5" style="width:64px"><option>5</option><option>10</option><option>20</option></select></div>
         <div class="crow"><label><input type="checkbox" id="acSpk" data-def="1" checked> 前 5 日無量能尖峰 ≤ 倍</label><input type="number" id="acSpkv" data-def="3" value="3" step="0.5"></div>
-        <div class="sub" style="margin-top:2px">分組(兩組擇一成立;都不勾 = 不限分組)</div>
-        <div class="crow"><label><input type="checkbox" id="acG1" data-def="1" checked> 爆量組:量 &gt; 均量 ×</label><input type="number" id="acVrv" data-def="2.5" value="2.5" step="0.1"></div>
-        <div class="crow"><span class="sub">　爆量前 5 日漲幅 &gt; %</span><input type="number" id="acPlo" data-def="2" value="2" step="1"></div>
-        <div class="crow"><span class="sub">　爆量前 5 日漲幅 ≤ %</span><input type="number" id="acPhi" data-def="25" value="25" step="1"></div>
-        <div class="crow"><label><input type="checkbox" id="acG2" data-def="1" checked> 非爆量組:近 5 日漲幅 &gt; %</label><input type="number" id="acNlo" data-def="0" value="0" step="1"></div>
-        <div class="crow"><span class="sub">　近 5 日漲幅 ≤ %</span><input type="number" id="acNhi" data-def="25" value="25" step="1"></div>
-        <div class="crow"><label><input type="checkbox" id="acTv" data-def="0"> 20 日均成交值 ≥ 億</label><input type="number" id="acTvv" data-def="1" value="1" step="0.5"></div>
+        <div class="crow"><label><input type="checkbox" id="acPos" data-def="1" checked> 位置:距 250 日高 ≤ %</label><input type="number" id="acPosDd" data-def="12" value="12" step="1"></div>
+        <div class="crow"><span class="sub">　或 ATR% ≤(標 [回])</span><input type="number" id="acPosAtr" data-def="2.5" value="2.5" step="0.1"></div>
+        <div class="crow"><label><input type="checkbox" id="acLim" data-def="1" checked> 當日漲幅 &lt; %(漲停不進)</label><input type="number" id="acLimv" data-def="9.5" value="9.5" step="0.5"></div>
+        <div class="crow"><label><input type="checkbox" id="acTv" data-def="1" checked> 20 日均成交值 ≥ 億</label><input type="number" id="acTvv" data-def="0.03" value="0.03" step="0.01"></div>
         <div class="crow"><label><input type="checkbox" id="acSc" data-def="1" checked> 評分 ≥</label><input type="number" id="acScv" data-def="3" value="3" min="0" max="6" step="1"></div>
+        <details><summary>舊版 v3 的額外條件(預設關閉)</summary>
+          <div class="crow"><label><input type="checkbox" id="acBbg" data-def="0"> 上軌−MA5 差距 ≤ %</label><input type="number" id="acBbgv" data-def="6" value="6" step="0.5"></div>
+          <div class="crow"><label><input type="checkbox" id="acBbs" data-def="0"> 上軌 5 日斜率 &gt;</label><input type="number" id="acBbsv" data-def="0" value="0" step="0.1"></div>
+          <div class="sub" style="margin-top:2px">分組(兩組擇一成立;都不勾 = 不限分組)</div>
+          <div class="crow"><label><input type="checkbox" id="acG1" data-def="0"> 爆量組:量 &gt; 均量 ×</label><input type="number" id="acVrv" data-def="2.5" value="2.5" step="0.1"></div>
+          <div class="crow"><span class="sub">　爆量前 5 日漲幅 &gt; %</span><input type="number" id="acPlo" data-def="2" value="2" step="1"></div>
+          <div class="crow"><span class="sub">　爆量前 5 日漲幅 ≤ %</span><input type="number" id="acPhi" data-def="25" value="25" step="1"></div>
+          <div class="crow"><label><input type="checkbox" id="acG2" data-def="0"> 非爆量組:近 5 日漲幅 &gt; %</label><input type="number" id="acNlo" data-def="0" value="0" step="1"></div>
+          <div class="crow"><span class="sub">　近 5 日漲幅 ≤ %</span><input type="number" id="acNhi" data-def="25" value="25" step="1"></div>
+        </details>
         <details><summary>評分的 6 個門檻(各得 1 分)</summary>
           <div class="crow"><span class="sub">ATR%(14) ≤</span><input type="number" id="scAtr" data-def="3.3" value="3.3" step="0.1"></div>
           <div class="crow"><span class="sub">距 250 日高 ≤ %</span><input type="number" id="scDd" data-def="8" value="8" step="0.5"></div>
-          <div class="crow"><span class="sub">20 日振幅 ≤ %</span><input type="number" id="scRng" data-def="16.5" value="16.5" step="0.5"></div>
+          <div class="crow"><span class="sub">20 日振幅 ≤ %</span><input type="number" id="scRng" data-def="16.49" value="16.49" step="0.5"></div>
           <div class="crow"><span class="sub">距 EMA60 ≤ %</span><input type="number" id="scD60" data-def="11.9" value="11.9" step="0.5"></div>
-          <div class="crow"><span class="sub">當日漲幅 ≤ %</span><input type="number" id="scR1" data-def="2.7" value="2.7" step="0.1"></div>
+          <div class="crow"><span class="sub">當日漲幅 ≤ %</span><input type="number" id="scR1" data-def="2.68" value="2.68" step="0.1"></div>
           <div class="crow"><span class="sub">股本 ≥ 億元</span><input type="number" id="scCap" data-def="10" value="10" step="1"></div>
         </details>
       </fieldset>
@@ -190,9 +197,10 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <p>大戶比例:集保戶股權分散表中,持股超過 100 張(100,001 股以上)、400 張以上或 1,000 張以上級距合計佔集保庫存的比例;網站只保留最新 12 週。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
         <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
         <p>收斂後突破:一根放量或大振幅的長紅創 10 日新高後,4~25 根實體收斂、末段波動降到推升時的 60% 以下,收盤站上收斂區實體上緣;推升幅度 ≥20%。</p>
-        <p>Accum-v3(囤貨後被發現):大盤多頭(加權收盤 &gt; EMA60 且 EMA60 二十日斜率 &gt; 0)、EMA150 十日斜率 ≥0.1%/日、|布林上軌(20,2)−MA5| ÷ 收盤 ≤6%、上軌 5 日斜率 &gt;0、收盤創 5 日新高、前 5 日單日量不超過 20 日均量 3 倍。分組:爆量組為當日量 &gt; 20 日均量 2.5 倍且爆量前 5 日漲幅 2~25%;非爆量組為近 5 日(含今日)漲幅 0~25%。每個條件都可勾選開關、修改門檻。</p>
-        <p>模型預測:用 2016~2021 年 6,621 筆 Accum-v3 交易訓練的機器學習模型,依訊號當天的 12 個數值(ATR%、距 250 日高、20 日振幅、距 EMA60、當日漲幅、股本、股價、20 日均成交值、量比、5 日與 20 日漲幅、EMA150 斜率)預測這筆交易的報酬。表格預設依模型預測由高到低排序:同一天訊號多時,先買排在前面的。模型偏好低價、低波動、還沒漲遠的股票;回測 2022~2026 年化約 37%(分數優先約 26%),加上 20 日均成交值 ≥1 億約 43%。模型不保證未來有效,資料不含已下市股票,實際表現可能較低。</p>
-        <p>評分(0~6,各 1 分):ATR% ≤3.3、距 250 日高 ≤8%、20 日振幅 ≤16.5%、距 EMA60 ≤11.9%、當日漲幅 ≤2.7%、股本 ≥10 億(集保總股數 × 10 元)。建議分數 ≥3 才進場、最多同時持有 8 檔、每檔 12.5% 資金、自最高收盤回落 8% 出場。回測的分數 ≥3 組在樣本外 2022~2026 年化約 28~32%,但評分條件是看過資料才挑的,實際表現可能較低。</p>
+        <p>Accum-v3c(最新版,訊號當天收盤全部成立):大盤 EMA60 比 20 個交易日前高;個股 EMA200 十日斜率 ≥0.1%/日;收盤 &gt; 前 5 天最高收盤;前 5 天(不含今天)量比最大值 ≤3;收盤距 250 日最高價 −12% 以內,或 ATR% ≤2.5(標 [回]);當日漲幅 &lt;9.5%;20 日均成交值 ≥3 百萬;評分 ≥3。舊版 v3 的布林與爆量分組條件仍可在「舊版 v3 的額外條件」打開。</p>
+        <p>評分(0~6,各 1 分):ATR%(14 日 Wilder)≤3.3、距 250 日高 ≤8%、20 日振幅 ≤16.49%、距 EMA60 ≤11.90%、當日漲幅 ≤2.68%、股本 ≥10 億(集保總股數 × 10 元)。表格預設依分數由高到低排序,同分時股價低的在前:同一天訊號多時,先買排在前面的。</p>
+        <p>出場:每天收盤檢查。ATR 移動停損距離 = 進場當天 ATR% × 4(最小 4%、最大 20%,進場後不再更新),收盤跌破「進場後最高收盤 ×(1 − 距離)」就賣;最高收盤曾達進場收盤 +6% 之後,收盤跌回進場收盤 +0.5% 以下也賣。兩者誰先觸發用誰,沒有時間停損與固定停利。標籤上的「停損」就是這筆訊號的停損距離。資金:最多 8 檔、每檔權益 12.5%,持有中不重複進場。</p>
+        <p>模型預測:用 2016~2021 年 6,621 筆 Accum-v3 交易訓練的機器學習模型(標籤是舊的 8% 移動停損報酬),依訊號當天的 12 個數值預測報酬。2026-10 用 2004~2016 含下市股票的資料驗證,模型排序沒有勝過分數排序,所以只當參考欄位。</p>
         <p>近5日波動 ≤ 平常 ×:近 5 日平均真實區間 ÷ 之前 60 日平均。市值以集保總股數 × 收盤價估算。資料僅供研究參考,不構成投資建議。</p>
       </details>
     </section>
@@ -202,9 +210,9 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const KEY = 'chiplens-filters-v3';
-const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acS150','acS150v','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acTv','acTvv','acSc','acScv','scAtr','scDd','scRng','scD60','scR1','scCap','vc','slope','res','e20','e60','q'];
-let DATA = null, rows = [], sortKey = '_ml', sortDir = -1, view = 'ratio';
+const KEY = 'chiplens-filters-v4';
+const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acAbove','acS200','acS200v','acS150','acS150v','acPos','acPosDd','acPosAtr','acLim','acLimv','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acTv','acTvv','acSc','acScv','scAtr','scDd','scRng','scD60','scR1','scCap','vc','slope','res','e20','e60','q'];
+let DATA = null, rows = [], sortKey = '_score', sortDir = -1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
 const QUOTE_URL = 'https://cool-wind-aee2tw-quote.farrell0701.workers.dev/quote'; // 留空字串 = 關閉即時功能
@@ -256,7 +264,8 @@ function streakOf(a){ let k=0; for(let i=a.length-1;i>0;i--){ if(a[i]!=null && a
 // 依使用者勾選的條件,在最近 21 根 K 棒內找最後一次符合的日子,回傳 {d: 幾日前, sc: 當天分數}
 function acCfg(){
   const on = id => $(id).checked, v = id => num($(id).value);
-  return {bull:on('acBull'), s150:on('acS150')?v('acS150v'):null, bbg:on('acBbg')?v('acBbgv'):null,
+  return {bull:on('acBull'), above:on('acAbove'), s200:on('acS200')?v('acS200v'):null, s150:on('acS150')?v('acS150v'):null,
+          pos:on('acPos'), posDd:v('acPosDd'), posAtr:v('acPosAtr'), lim:on('acLim')?v('acLimv'):null, bbg:on('acBbg')?v('acBbgv'):null,
           bbs:on('acBbs')?v('acBbsv'):null, nh:on('acNh')?$('acNhv').value:null, spk:on('acSpk')?v('acSpkv'):null,
           g1:on('acG1'), vr:v('acVrv'), plo:v('acPlo'), phi:v('acPhi'), g2:on('acG2'), nlo:v('acNlo'), nhi:v('acNhi'),
           sc:on('acSc')?v('acScv'):null, tv:on('acTv')?v('acTvv'):null,
@@ -275,6 +284,8 @@ function acFind(s){
   const ge = (x,t) => t==null || (x!=null && x>=t), le = (x,t) => t==null || (x!=null && x<=t), gt = (x,t) => t==null || (x!=null && x>t);
   for (let i=n-1;i>=0;i--){
     if (C.bull && !g.bl[i]) continue;
+    if (C.above && !(g.ab && g.ab[i])) continue;
+    if (C.s200 != null && !(g.s200 && ge(g.s200[i],C.s200))) continue;
     if (!ge(g.s150[i],C.s150) || !le(g.bbg[i],C.bbg) || !gt(g.bbs[i],C.bbs) || !le(g.spk[i],C.spk)) continue;
     if (C.nh && !g['nh'+C.nh][i]) continue;
     if (C.g1 || C.g2){
@@ -284,10 +295,15 @@ function acFind(s){
       const okN = C.g2 && !big && g.n5[i]!=null && g.n5[i] > C.nlo && g.n5[i] <= C.nhi;
       if (!(okV || okN)) continue;
     }
+    const back = C.pos && !le(g.ddh[i],C.posDd);           // 距高點太遠,但 ATR% 夠低 → [回]
+    if (back && !(g.atr[i]!=null && C.posAtr!=null && g.atr[i] <= C.posAtr)) continue;
+    if (C.lim != null && !(g.r1[i] != null && g.r1[i] < C.lim)) continue;
     if (C.tv != null && !(g.tv && g.tv[i] != null && g.tv[i] >= C.tv)) continue;
     const sc = acScore(s,g,i);
     if (C.sc != null && sc < C.sc) continue;
-    return {d:n-1-i, sc, ml:(g.ml ? g.ml[i] : null), grp:(g.vr[i]!=null && g.vr[i] > C.vr) ? '爆量' : '非爆量'};
+    const stop = g.atr[i]==null ? null : Math.min(20, Math.max(4, g.atr[i]*4));   // ATR×4 移動停損距離(進場時固定)
+    return {d:n-1-i, sc, back, stop, ml:(g.ml ? g.ml[i] : null),
+            grp:(C.g1 || C.g2) ? ((g.vr[i]!=null && g.vr[i] > C.vr) ? '爆量' : '非爆量') : null};
   }
   return null;
 }
@@ -303,7 +319,7 @@ function derive(){
     s._delta = (s._p != null && s._prev != null) ? +(s._p - s._prev).toFixed(2) : null;
     s._wk = (n > 1 && a[n-1] != null && a[n-2] != null) ? +(a[n-1]-a[n-2]).toFixed(2) : null;
     s._streak = streakOf(a);
-    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._ml = A ? A.ml : null; s._grp = A ? A.grp : null;
+    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._ml = A ? A.ml : null; s._grp = A ? A.grp : null; s._back = A ? A.back : false; s._stop = A ? A.stop : null;
     const L = liveOn ? live[s.code] : null;
     s._c = L ? L.price : s.close;
     s._chg = L ? (L.chg ?? s.chg) : s.chg;
@@ -396,7 +412,7 @@ function priceSpark(s){
 function techTags(s){
   const t = [];
   if (s.ab != null) t.push(`<span class="tag ${s.ab<=1?'hot':'on'}">A→B ${s.ab===0?'今日':s.ab+'日前'}</span>`);
-  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}">Accum-v3 ${s._vb===0?'今日':s._vb+'日前'}・${s._grp}組</span>`);
+  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}">Accum-v3c ${s._vb===0?'今日':s._vb+'日前'}${s._back?' [回]':''}${s._grp?'・'+s._grp+'組':''}${s._stop!=null?'・停損 '+s._stop.toFixed(1)+'%':''}</span>`);
   if (s.vcp != null) t.push(`<span class="tag ${s.vcp<=1?'hot':'on'}">收斂突破 ${s.vcp===0?'今日':s.vcp+'日前'}</span>`);
   if (s.res120 != null && s.res120 <= 0) t.push('<span class="tag on">創120日高</span>');
   const L = liveOn ? live[s.code] : null;
@@ -416,6 +432,7 @@ function render(skipLive){
     if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
     const c = (x > y ? 1 : x < y ? -1 : 0) * sortDir;
     if (c) return c;
+    if (key === '_score' && a._c != null && b._c != null && a._c !== b._c) return a._c - b._c;   // 同分:股價低的優先
     const u = a._delta, w = b._delta;   // 相同時,大戶比例變化大的在前
     return (u == null ? 1 : w == null ? -1 : (w - u));
   });
