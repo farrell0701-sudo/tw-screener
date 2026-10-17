@@ -133,32 +133,37 @@ def vcp_signals(o, h, l, c, v, P):
     return sig
 
 
-BULL = {}   # 日期 -> 大盤是否多頭(加權指數 收盤>EMA60 且 EMA60 20日斜率>0)
+BULL = {}    # 日期 -> 大盤 EMA60 是否上彎(EMA60 今 ÷ 20 日前 − 1 > 0,v3c 的大盤條件)
+ABOVE = {}   # 日期 -> 加權收盤是否 > EMA60(舊版 v3 另外要求,網頁可勾選)
 
 
 def load_bull():
     f = DATA / "prices" / "TAIEX.csv"
     if not f.exists():
-        return {}
+        return {}, {}
     d = pd.read_csv(f, index_col=0, parse_dates=True).dropna(subset=["Close"])
     c = d["Close"].values.astype(float)
     e = ema(c, 60)
     s = np.full(len(e), np.nan)
     s[20:] = e[20:] / e[:-20] - 1
-    return {dt: bool(c[i] > e[i] and s[i] > 0) for i, dt in enumerate(d.index) if i >= 80}
+    idx = [(i, dt) for i, dt in enumerate(d.index) if i >= 80]
+    return {dt: bool(s[i] > 0) for i, dt in idx}, {dt: bool(c[i] > e[i]) for i, dt in idx}
 
 
 SG_W = SIGNAL_LOOKBACK + 1   # 輸出最近幾根的條件數值,讓網頁端依開關即時計算
 
 
 def ac_parts(o, h, l, c, v, dates):
-    """Accum-v3(囤貨後被發現)最近 SG_W 根的各條件與評分數值。
+    """Accum v3c(囤貨後被發現)最近 SG_W 根的各條件與評分數值。
     網頁端依使用者的勾選與門檻組合出訊號與分數,所以這裡只輸出原始數值。"""
     n = len(c)
     cs, hs, ls, vs = pd.Series(c), pd.Series(h), pd.Series(l), pd.Series(v)
+    e200 = ema(c, 200)
+    s200 = np.full(n, np.nan)
+    s200[10:] = (e200[10:] / e200[:-10] - 1) * 10                    # EMA200 十日斜率 %/日
     e150 = ema(c, 150)
     s150 = np.full(n, np.nan)
-    s150[10:] = (e150[10:] / e150[:-10] - 1) * 10                    # %/日
+    s150[10:] = (e150[10:] / e150[:-10] - 1) * 10                    # 模型特徵仍用 EMA150(訓練時的定義)
     m20 = cs.rolling(20).mean()
     bbu = (m20 + 2 * cs.rolling(20).std(ddof=0)).values
     ma5 = cs.rolling(5).mean().values
@@ -170,23 +175,24 @@ def ac_parts(o, h, l, c, v, dates):
     pre = ((cs.shift(1) / cs.shift(6) - 1) * 100).values              # 爆量組:爆量前 5 日漲幅
     n5 = ((cs / cs.shift(5) - 1) * 100).values                        # 非爆量組:近 5 日漲幅(含今日)
     bl = np.array([BULL.get(d, False) for d in dates]) if BULL else np.ones(n, bool)
+    ba = np.array([ABOVE.get(d, False) for d in dates]) if ABOVE else np.ones(n, bool)
     pc = np.r_[np.nan, c[:-1]]
     atr = pd.Series(true_range(h, l, c)).ewm(alpha=1 / 14, adjust=False).mean().values
     sl = slice(max(0, n - SG_W), n)
     f = lambda a, d=2: [None if not np.isfinite(x) else round(float(x), d) for x in a[sl]]
     b = lambda a: [1 if x else 0 for x in a[sl]]
-    out = {"s150": f(s150, 3), "bbg": f(bbg), "bbs": f(bbs, 3), "spk": f(spk), "vr": f(vr),
-           "pre": f(pre, 1), "n5": f(n5, 1), "bl": b(bl)}
+    out = {"s200": f(s200, 4), "bbg": f(bbg), "bbs": f(bbs, 3), "spk": f(spk), "vr": f(vr),
+           "pre": f(pre, 1), "n5": f(n5, 1), "bl": b(bl), "ba": b(ba), "c": f(c, 2)}
     for N in (5, 10, 20):
         out[f"nh{N}"] = b(c > cs.rolling(N).max().shift(1).values)
     # 評分用(6 項中的 5 項;股本在股票層級)
     out["atr"] = f(atr / c * 100, 2)
-    out["ddh"] = f((1 - c / hs.rolling(250).max().values) * 100, 1)   # 距 250 日高點(正數=低於高點的 %)
-    out["rng"] = f((hs.rolling(20).max().values - ls.rolling(20).min().values) / c * 100, 1)
-    out["d60"] = f((c / ema(c, 60) - 1) * 100, 1)
+    out["ddh"] = f((1 - c / hs.rolling(250).max().values) * 100, 2)   # 距 250 日高點(正數=低於高點的 %)
+    out["rng"] = f((hs.rolling(20).max().values - ls.rolling(20).min().values) / c * 100, 2)
+    out["d60"] = f((c / ema(c, 60) - 1) * 100, 2)
     out["r1"] = f((c / pc - 1) * 100, 2)
     tv = (vs.rolling(20).mean() * cs).values                        # 20 日均成交值(元)
-    out["tv"] = f(tv / 1e8, 2)                                       # 億元,網頁的成交值門檻用
+    out["tv"] = f(tv / 1e8, 4)                                       # 億元,網頁的成交值門檻用
     # 模型特徵(不輸出到網頁,只在 Python 端預測用)
     sl_arr = lambda a: np.asarray(a, float)[sl]
     out["_x"] = {"atrp": sl_arr(atr / c * 100), "dd250": sl_arr((c / hs.rolling(250).max().values - 1) * 100),
@@ -297,7 +303,7 @@ def tech(df):
     if n < 160:
         return None
     tr = true_range(h, l, c)
-    e20, e60, e150 = ema(c, 20), ema(c, 60), ema(c, 150)
+    e20, e60, e200 = ema(c, 20), ema(c, 60), ema(c, 200)
     atr = pd.Series(tr).ewm(alpha=1 / 14, adjust=False).mean().values
     out = {
         "date": df.index[-1].strftime("%Y-%m-%d"),
@@ -307,7 +313,7 @@ def tech(df):
         "volR": round(v[-1] / v[-21:-1].mean(), 2) if v[-21:-1].mean() > 0 else None,
         "aboveE20": bool(c[-1] > e20[-1]),
         "aboveE60": bool(c[-1] > e60[-1]),
-        "slope150": round((e150[-1] / e150[-11] - 1) * 10, 3),
+        "slope200": round((e200[-1] / e200[-11] - 1) * 10, 3),
         "atrp": round(atr[-1] / c[-1] * 100, 2),
         "vc": round(tr[-5:].mean() / tr[-65:-5].mean(), 2),
         "res120": round((h[-121:-1].max() / c[-1] - 1) * 100, 1),
@@ -318,7 +324,7 @@ def tech(df):
     }
     out["ac"] = ac_parts(o, h, l, c, v, df.index)
     tvs = pd.Series(v).rolling(20).mean().values * c / 1e8
-    out["ac"]["tv"] = [None if not np.isfinite(x) else round(float(x), 2) for x in tvs[max(0, n - SG_W):]]
+    out["ac"]["tv"] = [None if not np.isfinite(x) else round(float(x), 4) for x in tvs[max(0, n - SG_W):]]
     if MODEL:
         out["_mlX"] = ml_feats(h, l, c, v)
     return out
@@ -335,8 +341,8 @@ def clean(x):
 
 
 def main():
-    global BULL
-    BULL = load_bull()
+    global BULL, ABOVE
+    BULL, ABOVE = load_bull()
     lst = pd.read_csv(DATA / "stock_list.csv", dtype=str).set_index("code")
     weeks, hold = load_tdcc()
     rows = []
