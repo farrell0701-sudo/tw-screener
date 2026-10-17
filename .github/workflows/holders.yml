@@ -1,0 +1,47 @@
+name: 下載歷史集保大戶(回測用)
+
+on:
+  workflow_dispatch: {}      # 在 Actions 頁面手動按「Run workflow」;沒抓完就再按一次,會自動接續
+
+permissions:
+  contents: write
+
+concurrency:
+  group: holders
+  cancel-in-progress: false
+
+jobs:
+  holders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安裝套件
+        run: pip install pandas requests
+
+      - name: 取回之前已抓的部分(第一次沒有,會略過)
+        run: |
+          git clone -q --depth 1 -b holders-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_holders || mkdir -p out_holders
+          rm -rf out_holders/.git
+
+      - name: 下載集保大戶(最多約 5 小時 20 分)
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+        run: python scripts/fetch_holders.py
+
+      - name: 存到獨立分支 holders-data(不影響網站)
+        if: always()
+        run: |
+          cd out_holders
+          ls -la
+          git init -q -b holders-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "集保大戶歷史 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" holders-data
