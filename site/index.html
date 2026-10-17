@@ -145,14 +145,12 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <div class="crow"><span class="sub">　近 5 日漲幅 ≤ %</span><input type="number" id="acNhi" data-def="25" value="25" step="1"></div>
         </details>
         <div class="crow"><label><input type="checkbox" id="acTv" data-def="1" checked> 20 日均成交值 ≥ 百萬</label><input type="number" id="acTvv" data-def="3" value="3" step="1"></div>
-        <div class="crow"><label><input type="checkbox" id="acSc" data-def="1" checked> 評分 ≥</label><input type="number" id="acScv" data-def="3" value="3" min="0" max="6" step="1"></div>
-        <details><summary>評分的 6 個門檻(各得 1 分)</summary>
+        <div class="crow"><label><input type="checkbox" id="acSc" data-def="1" checked> 評分 ≥</label><input type="number" id="acScv" data-def="2" value="2" min="0" max="4" step="1"></div>
+        <details><summary>評分的 4 個門檻(各得 1 分)</summary>
           <div class="crow"><span class="sub">ATR%(14) ≤</span><input type="number" id="scAtr" data-def="3.3" value="3.3" step="0.1"></div>
           <div class="crow"><span class="sub">距 250 日高 ≤ %</span><input type="number" id="scDd" data-def="8" value="8" step="0.5"></div>
-          <div class="crow"><span class="sub">20 日振幅 ≤ %</span><input type="number" id="scRng" data-def="16.49" value="16.49" step="0.5"></div>
-          <div class="crow"><span class="sub">距 EMA60 ≤ %</span><input type="number" id="scD60" data-def="11.9" value="11.9" step="0.5"></div>
-          <div class="crow"><span class="sub">當日漲幅 ≤ %</span><input type="number" id="scR1" data-def="2.68" value="2.68" step="0.1"></div>
-          <div class="crow"><span class="sub">股本 ≥ 億元</span><input type="number" id="scCap" data-def="10" value="10" step="1"></div>
+          <div class="crow"><span class="sub">20 日均成交值 &lt; 百萬</span><input type="number" id="scTv" data-def="20" value="20" step="1"></div>
+          <div class="crow"><span class="sub">股價 &lt; 元</span><input type="number" id="scPx" data-def="30" value="30" step="1"></div>
         </details>
       </fieldset>
       <fieldset>
@@ -206,9 +204,9 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <p>大戶比例:集保戶股權分散表中,持股超過 100 張(100,001 股以上)、400 張以上或 1,000 張以上級距合計佔集保庫存的比例;網站只保留最新 12 週。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
         <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
         <p>收斂後突破:一根放量或大振幅的長紅創 10 日新高後,4~25 根實體收斂、末段波動降到推升時的 60% 以下,收盤站上收斂區實體上緣;推升幅度 ≥20%。</p>
-        <p>Accum v3c(囤貨後被發現):大盤 EMA60 比 20 日前高、個股 EMA200 十日斜率 ≥0.1%/日、收盤創 5 日新高(比前 5 日收盤)、前 5 日單日量不超過 20 日均量 3 倍、距 250 日高 ≤12% 或 ATR% ≤2.5(後者標 [回])、當日漲幅 &lt;9.5%、評分 ≥3、20 日均成交值 ≥3 百萬,並排除生技醫療業與通信網路業。舊版 v3 的布林貼軌與爆量分組仍保留在「舊版 v3 條件」,預設關閉。每個條件都可勾選開關、修改門檻。</p>
+        <p>Accum v3c(囤貨後被發現):大盤 EMA60 比 20 日前高、個股 EMA200 十日斜率 ≥0.1%/日、收盤創 5 日新高(比前 5 日收盤)、前 5 日單日量不超過 20 日均量 3 倍、距 250 日高 ≤12% 或 ATR% ≤2.5(後者標 [回])、當日漲幅 &lt;9.5%、評分 ≥2、20 日均成交值 ≥3 百萬,並排除生技醫療業與通信網路業。舊版 v3 的布林貼軌與爆量分組仍保留在「舊版 v3 條件」,預設關閉。每個條件都可勾選開關、修改門檻。</p>
         <p>模型預測:用 2016~2021 年 6,621 筆 Accum-v3 交易訓練的機器學習模型,依訊號當天的 12 個數值(ATR%、距 250 日高、20 日振幅、距 EMA60、當日漲幅、股本、股價、20 日均成交值、量比、5 日與 20 日漲幅、EMA150 斜率)預測這筆交易的報酬。模型是用舊的 8% 出場標籤訓練,改用 v3c 出場重算後,在 2004~2016(含下市股)與 2022~2026 兩段樣本外都沒有穩定勝過隨機排序,所以表格預設改依「Accum 分數高 → 同分股價低」排序,模型預測僅供參考。</p>
-        <p>評分(0~6,各 1 分):ATR% ≤3.3、距 250 日高 ≤8%、20 日振幅 ≤16.49%、距 EMA60 ≤11.9%、當日漲幅 ≤2.68%、股本 ≥10 億(集保總股數 × 10 元)。建議分數 ≥3 才進場;同一天訊號多時,分數高的先買,同分選股價低的。最多同時持有 8 檔、每檔 12.5% 資金。出場:移動停損距離 = 訊號日 ATR% × 4(最小 4%、最大 20%,進場後固定),收盤跌破「進場後最高收盤 ×(1 − 距離)」就賣;另外最高收盤曾達進場價 +6% 後,收盤跌破進場價 +0.5% 也賣,兩者誰先觸發用誰。評分條件是看過資料才挑的,實際表現可能較低。</p>
+        <p>評分(0~4,各 1 分):ATR% ≤3.3、距 250 日高 ≤8%、20 日均成交值 &lt;2,000 萬、股價 &lt;30 元。建議分數 ≥2 才進場;同一天訊號多時,分數高的先買,同分選股價低的。最多同時持有 8 檔、每檔 12.5% 資金。出場:移動停損距離 = 訊號日 ATR% × 4(最小 4%、最大 20%,進場後固定),收盤跌破「進場後最高收盤 ×(1 − 距離)」就賣;另外最高收盤曾達進場價 +6% 後,收盤跌破進場價 +0.5% 也賣,兩者誰先觸發用誰。評分條件是看過資料才挑的,實際表現可能較低。</p>
         <p>近5日波動 ≤ 平常 ×:近 5 日平均真實區間 ÷ 之前 60 日平均。市值以集保總股數 × 收盤價估算。資料僅供研究參考,不構成投資建議。</p>
       </details>
     </section>
@@ -218,8 +216,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const KEY = 'chiplens-filters-v4';
-const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acAbove','acS200','acS200v','acPos','acPosDd','acPosAtr','acLim','acLimv','acExInd','exK','exMin','exMax','exBe','exBeKeep','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acTv','acTvv','acSc','acScv','scAtr','scDd','scRng','scD60','scR1','scCap','vc','slope','res','e20','e60','q'];
+const KEY = 'chiplens-filters-v5';   // v5:評分改為 4 項,舊的門檻設定不沿用
+const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acAbove','acS200','acS200v','acPos','acPosDd','acPosAtr','acLim','acLimv','acExInd','exK','exMin','exMax','exBe','exBeKeep','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acTv','acTvv','acSc','acScv','scAtr','scDd','scTv','scPx','vc','slope','res','e20','e60','q'];
 let DATA = null, rows = [], sortKey = '_score', sortDir = -1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
@@ -278,14 +276,15 @@ function acCfg(){
           bbs:on('acBbs')?v('acBbsv'):null, nh:on('acNh')?$('acNhv').value:null, spk:on('acSpk')?v('acSpkv'):null,
           g1:on('acG1'), vr:v('acVrv'), plo:v('acPlo'), phi:v('acPhi'), g2:on('acG2'), nlo:v('acNlo'), nhi:v('acNhi'),
           sc:on('acSc')?v('acScv'):null, tv:on('acTv')&&v('acTvv')!=null?v('acTvv')/100:null,
-          t:{atr:v('scAtr'), dd:v('scDd'), rng:v('scRng'), d60:v('scD60'), r1:v('scR1'), cap:v('scCap')}};
+          t:{atr:v('scAtr'), dd:v('scDd'), tv:v('scTv')!=null?v('scTv')/100:null, px:v('scPx')}};
 }
 let ACC = null;
 const okLe = (x,t) => x!=null && t!=null && x<=t;
+const okLt = (x,t) => x!=null && t!=null && x<t;
 function acScore(s,g,i){
   const T = ACC.t;
-  return (okLe(g.atr[i],T.atr)?1:0) + (okLe(g.ddh[i],T.dd)?1:0) + (okLe(g.rng[i],T.rng)?1:0)
-       + (okLe(g.d60[i],T.d60)?1:0) + (okLe(g.r1[i],T.r1)?1:0) + (s.cap!=null && T.cap!=null && s.cap>=T.cap?1:0);
+  return (okLe(g.atr[i],T.atr)?1:0) + (okLe(g.ddh[i],T.dd)?1:0)
+       + (okLt(g.tv ? g.tv[i] : null,T.tv)?1:0) + (okLt(g.c ? g.c[i] : null,T.px)?1:0);
 }
 const EX_IND = ['生技醫療業', '通信網路業'];
 // v3c 出場:從訊號日收盤(進場價)往後用日收盤推算,回傳目前停損線、是否已進入保本、是否已觸發
@@ -486,7 +485,7 @@ function render(skipLive){
     <td><span class="streak ${s._streak>=3?'s3':''}">${s._streak}</span></td>
     <td>${weekBars(s)}</td>
     <td class="num">${s._ml==null?'<span class="ind">—</span>':`<b class="${cls(s._ml)}">${sign(s._ml,1)}%</b>`}</td>
-    <td class="num">${s._score==null?'<span class="ind">—</span>':`<span class="streak ${s._score>=3?'s3':''}">${s._score}</span><div class="ind num">/ 6</div>`}</td>
+    <td class="num">${s._score==null?'<span class="ind">—</span>':`<span class="streak ${s._score>=2?'s3':''}">${s._score}</span><div class="ind num">/ 4</div>`}</td>
     <td class="num">${stopCell(s)}</td>
     <td class="num">${s.mcap==null?'—':Math.round(s.mcap).toLocaleString()}<div class="ind num">${s.mcapRank?'#'+s.mcapRank:''}</div></td>
     <td class="l">${techTags(s)}</td>

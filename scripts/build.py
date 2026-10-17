@@ -185,7 +185,7 @@ def ac_parts(o, h, l, c, v, dates):
            "pre": f(pre, 1), "n5": f(n5, 1), "bl": b(bl), "ba": b(ba), "c": f(c, 2)}
     for N in (5, 10, 20):
         out[f"nh{N}"] = b(c > cs.rolling(N).max().shift(1).values)
-    # 評分用(6 項中的 5 項;股本在股票層級)
+    # 評分用(ATR%、距 250 日高;成交值 tv、股價 c 在下方)
     out["atr"] = f(atr / c * 100, 2)
     out["ddh"] = f((1 - c / hs.rolling(250).max().values) * 100, 2)   # 距 250 日高點(正數=低於高點的 %)
     out["rng"] = f((hs.rolling(20).max().values - ls.rolling(20).min().values) / c * 100, 2)
