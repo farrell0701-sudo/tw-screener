@@ -153,9 +153,10 @@ def load_bull():
 SG_W = SIGNAL_LOOKBACK + 1   # 輸出最近幾根的條件數值,讓網頁端依開關即時計算
 
 
-def ac_parts(o, h, l, c, v, dates):
-    """Accum v3c(囤貨後被發現)最近 SG_W 根的各條件與評分數值。
-    網頁端依使用者的勾選與門檻組合出訊號與分數,所以這裡只輸出原始數值。"""
+def ac_parts(o, h, l, c, v, dates, rc):
+    """Accum V3C-PRO(囤貨後被發現)最近 SG_W 根的各條件與評分數值。
+    網頁端依使用者的勾選與門檻組合出訊號與分數,所以這裡只輸出原始數值。
+    o/h/l/c 是還原價(技術指標、停損用),rc 是實際收盤(股價、成交值門檻用)。"""
     n = len(c)
     cs, hs, ls, vs = pd.Series(c), pd.Series(h), pd.Series(l), pd.Series(v)
     e200 = ema(c, 200)
@@ -182,17 +183,16 @@ def ac_parts(o, h, l, c, v, dates):
     f = lambda a, d=2: [None if not np.isfinite(x) else round(float(x), d) for x in a[sl]]
     b = lambda a: [1 if x else 0 for x in a[sl]]
     out = {"s200": f(s200, 4), "bbg": f(bbg), "bbs": f(bbs, 3), "spk": f(spk), "vr": f(vr),
-           "pre": f(pre, 1), "n5": f(n5, 1), "bl": b(bl), "ba": b(ba), "c": f(c, 2)}
+           "pre": f(pre, 1), "n5": f(n5, 1), "bl": b(bl), "ba": b(ba), "c": f(c, 4), "rc": f(rc, 2)}
     for N in (5, 10, 20):
         out[f"nh{N}"] = b(c > cs.rolling(N).max().shift(1).values)
-    # 評分用(ATR%、距 250 日高;成交值 tv、股價 c 在下方)
-    out["atr"] = f(atr / c * 100, 2)
-    out["ddh"] = f((1 - c / hs.rolling(250).max().values) * 100, 2)   # 距 250 日高點(正數=低於高點的 %)
+    # 評分用(ATR%、距 250 日高;成交值 tv 在下方、股價用實際收盤 rc)。小數位要夠,門檻邊界才不會被四捨五入改變
+    out["atr"] = f(atr / c * 100, 4)
+    out["ddh"] = f((1 - c / hs.rolling(250).max().values) * 100, 4)   # 距 250 日高點(正數=低於高點的 %)
     out["rng"] = f((hs.rolling(20).max().values - ls.rolling(20).min().values) / c * 100, 2)
     out["d60"] = f((c / ema(c, 60) - 1) * 100, 2)
-    out["r1"] = f((c / pc - 1) * 100, 2)
-    tv = (vs.rolling(20).mean() * cs).values                        # 20 日均成交值(元)
-    out["tv"] = f(tv / 1e8, 4)                                       # 億元,網頁的成交值門檻用
+    out["r1"] = f((c / pc - 1) * 100, 4)
+    tv = (vs.rolling(20).mean() * cs).values                        # 20 日均成交值(元,還原價,模型特徵用)
     # 模型特徵(不輸出到網頁,只在 Python 端預測用)
     sl_arr = lambda a: np.asarray(a, float)[sl]
     out["_x"] = {"atrp": sl_arr(atr / c * 100), "dd250": sl_arr((c / hs.rolling(250).max().values - 1) * 100),
@@ -298,6 +298,10 @@ def days_since(sig):
 
 def tech(df):
     o, h, l, c = (df[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
+    rc = c.copy()                       # 實際收盤
+    if "AdjClose" in df.columns:        # 新格式:OHLC 是實際價,依 AdjClose ÷ Close 換成還原價
+        k = df["AdjClose"].values.astype(float) / c
+        o, h, l, c = o * k, h * k, l * k, df["AdjClose"].values.astype(float)
     v = df["Volume"].fillna(0).values.astype(float)
     n = len(c)
     if n < 160:
@@ -307,7 +311,7 @@ def tech(df):
     atr = pd.Series(tr).ewm(alpha=1 / 14, adjust=False).mean().values
     out = {
         "date": df.index[-1].strftime("%Y-%m-%d"),
-        "close": round(c[-1], 2),
+        "close": round(rc[-1], 2),   # 實際收盤
         "chg": round((c[-1] / c[-2] - 1) * 100, 2),
         "vol": int(v[-1] / 1000),  # 張
         "volR": round(v[-1] / v[-21:-1].mean(), 2) if v[-21:-1].mean() > 0 else None,
@@ -322,9 +326,9 @@ def tech(df):
         "vcp": days_since(vcp_signals(o, h, l, c, v, VCP_P)),
         "spark": [round(x, 2) for x in c[-60:]],
     }
-    out["ac"] = ac_parts(o, h, l, c, v, df.index)
-    tvs = pd.Series(v).rolling(20).mean().values * c / 1e8
-    out["ac"]["tv"] = [None if not np.isfinite(x) else round(float(x), 4) for x in tvs[max(0, n - SG_W):]]
+    out["ac"] = ac_parts(o, h, l, c, v, df.index, rc)
+    tvs = pd.Series(v).rolling(20).mean().values * rc / 1e8      # 20 日均量 × 實際收盤(億元),V3C-PRO 的成交值門檻
+    out["ac"]["tv"] = [None if not np.isfinite(x) else round(float(x), 6) for x in tvs[max(0, n - SG_W):]]
     if MODEL:
         out["_mlX"] = ml_feats(h, l, c, v)
     return out
@@ -351,7 +355,8 @@ def main():
         t = None
         if f.exists():
             try:
-                t = tech(pd.read_csv(f, index_col=0, parse_dates=True).dropna(subset=["Close"]))
+                d = pd.read_csv(f, index_col=0, parse_dates=True).dropna(subset=["Close"])
+                t = tech(d[(d["Volume"] > 0) & (d["Close"] > 0)])   # 同回測:略過沒有成交的日子
             except Exception as e:  # noqa: BLE001
                 print(f"[build] {code} 技術面失敗: {e}", file=sys.stderr)
         hrec = hold.get(code)
