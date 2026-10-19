@@ -296,6 +296,11 @@ def days_since(sig):
     return int(len(sig) - 1 - idx[-1]) if len(idx) else None
 
 
+def sig_count(sig):
+    """訊號出現次數(ab/vcp 只檢查最近 SIGNAL_LOOKBACK 根左右,範圍同 days_since)。"""
+    return int(sig.sum())
+
+
 def tech(df):
     o, h, l, c = (df[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     rc = c.copy()                       # 實際收盤
@@ -322,10 +327,13 @@ def tech(df):
         "vc": round(tr[-5:].mean() / tr[-65:-5].mean(), 2),
         "res120": round((h[-121:-1].max() / c[-1] - 1) * 100, 1),
         "ret20": round((c[-1] / c[-21] - 1) * 100, 1),
-        "ab": days_since(ab_signals(o, h, l, c, AB_P)),
-        "vcp": days_since(vcp_signals(o, h, l, c, v, VCP_P)),
-        "spark": [round(x, 2) for x in c[-60:]],
     }
+    ab, vcp = ab_signals(o, h, l, c, AB_P), vcp_signals(o, h, l, c, v, VCP_P)
+    out.update({
+        "ab": days_since(ab), "abN": sig_count(ab),
+        "vcp": days_since(vcp), "vcpN": sig_count(vcp),
+        "spark": [round(x, 2) for x in c[-60:]],
+    })
     out["ac"] = ac_parts(o, h, l, c, v, df.index, rc)
     tvs = pd.Series(v).rolling(20).mean().values * rc / 1e8      # 20 日均量 × 實際收盤(億元),V3C-PRO 的成交值門檻
     out["ac"]["tv"] = [None if not np.isfinite(x) else round(float(x), 6) for x in tvs[max(0, n - SG_W):]]
