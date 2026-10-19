@@ -1,0 +1,39 @@
+name: 下載 2016 後下市股價(回測用)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [claude/project-thread-8gn7e5]
+    paths: [scripts/fetch_delist.py, .github/workflows/delist.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chips
+  cancel-in-progress: false
+
+jobs:
+  delist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 下載下市股價
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+        run: python scripts/fetch_delist.py
+      - name: 存到分支 delist-data
+        run: |
+          cd out_delist
+          git init -q -b delist-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "下市股價 $(date -u +'%Y-%m-%d %H:%M')"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist-data
