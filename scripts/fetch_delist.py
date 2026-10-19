@@ -1,7 +1,7 @@
 """下載 2016-07 以後下市股票的日線(FinMind),補 2016-2026 回測的存活偏誤。不影響網站。
 
 資料來源:FinMind API v4(GitHub Secret FINMIND_TOKEN)
-  - TaiwanStockInfo / TaiwanStockDelisting  找出 2016-07-01 以後下市、目前不在清單上的一般股票
+  - TaiwanStockDelisting  找出 2016-07-01 以後下市、不在 data/stock_list.csv 的一般股票
   - TaiwanStockPrice                         2015-01-01 起的原始日線(未還原)
 每檔 1 次查詢,約 150 檔。
 
@@ -63,11 +63,10 @@ def main():
     if not TOKEN:
         sys.exit("找不到 FINMIND_TOKEN。")
     OUT.mkdir(parents=True, exist_ok=True)
-    info = get("TaiwanStockInfo", dated=False)
     dl = get("TaiwanStockDelisting", dated=False)
-    if info is None or dl is None or not len(dl):
+    if dl is None or not len(dl):
         sys.exit("清單抓不到。")
-    have = set(info["stock_id"].astype(str))
+    have = set(pd.read_csv(ROOT / "data" / "stock_list.csv", dtype=str).code)   # 回測現存股清單(TaiwanStockInfo 也含部分已下市股)
     dl["stock_id"] = dl["stock_id"].astype(str).str.strip()
     dl = dl[dl.stock_id.map(ok_code) & ~dl.stock_id.isin(have) & (pd.to_datetime(dl["date"]) >= CUT)]
     dl = dl.drop_duplicates("stock_id", keep="last").sort_values("stock_id")
