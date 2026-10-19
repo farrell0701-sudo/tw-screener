@@ -205,8 +205,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
         <p>收斂後突破:一根放量或大振幅的長紅創 10 日新高後,4~25 根實體收斂、末段波動降到推升時的 60% 以下,收盤站上收斂區實體上緣;推升幅度 ≥20%。</p>
         <p>Accum V3C-PRO(囤貨後被發現):大盤 EMA60 比 20 日前高、個股 EMA200 十日斜率 ≥0.1%/日、收盤創 5 日新高(比前 5 日收盤)、距 250 日高 ≤12% 或 ATR% ≤2.5(後者標 [回])、當日漲幅 &lt;9.5%、評分 ≥2、20 日均成交值 ≥3 百萬(實際成交值 = 20 日均量 × 實際收盤),並排除生技醫療業與通信網路業。技術指標用還原權息價,股價與成交值門檻用實際股價。前 5 日量比 ≤3、舊版 v3 的布林貼軌與爆量分組保留在「舊版條件」,預設關閉。每個條件都可勾選開關、修改門檻。</p>
-        <p>模型預測:用 2016~2021 年 6,621 筆 Accum-v3 交易訓練的機器學習模型,依訊號當天的 12 個數值(ATR%、距 250 日高、20 日振幅、距 EMA60、當日漲幅、股本、股價、20 日均成交值、量比、5 日與 20 日漲幅、EMA150 斜率)預測這筆交易的報酬。模型是用舊的 8% 出場標籤訓練,改用 v3c 出場重算後,在 2004~2016(含下市股)與 2022~2026 兩段樣本外都沒有穩定勝過隨機排序,所以表格預設改依「Accum 分數高 → 同分股價低」排序,模型預測僅供參考。</p>
-        <p>評分(0~4,各 1 分):ATR% ≤3.3、距 250 日高 ≤8%、20 日均成交值 &lt;2,000 萬、股價 &lt;30 元(後兩項用實際股價)。建議分數 ≥2 才進場;同一天訊號多時,分數高的先買,同分選股價低的。最多同時持有 8 檔、每檔買進當時權益的 12.5%,已持有的不加買,閒置資金留現金。出場:移動停損距離 = 訊號日 ATR% × 4(最小 4%、最大 15%,進場後固定),收盤跌破「進場後最高收盤 ×(1 − 距離)」就賣;另外最高收盤曾達進場價 +6% 後,收盤跌破進場價 +0.5% 也賣,兩者誰先觸發用誰。評分條件是看過資料才挑的,實際表現可能較低。</p>
+        <p>模型預測:用 2016~2021 年 6,621 筆 Accum-v3 交易訓練的機器學習模型,依訊號當天的 12 個數值(ATR%、距 250 日高、20 日振幅、距 EMA60、當日漲幅、股本、股價、20 日均成交值、量比、5 日與 20 日漲幅、EMA150 斜率)預測這筆交易的報酬。模型是用舊的 8% 出場標籤訓練,改用 v3c 出場重算後,在 2004~2016(含下市股)與 2022~2026 兩段樣本外都沒有穩定勝過隨機排序,所以表格預設依「策略排序」排列,模型預測僅供參考。</p>
+        <p>評分(0~4,各 1 分):ATR% ≤3.3、距 250 日高 ≤8%、20 日均成交值 &lt;2,000 萬、股價 &lt;30 元(後兩項用實際股價)。建議分數 ≥2 才進場;同一天訊號多時,分數高的先買,同分選股價低的。「策略排序」欄就是這個順序的名次(1 = 最優先,前 8 名加底色;同分同價再看大戶比例變化),只排目前篩選後有 V3C-PRO 訊號的股票,下方小字是分數。技術型態標籤的「已出現 N 次」是最近 21 個交易日內這個訊號出現的次數。最多同時持有 8 檔、每檔買進當時權益的 12.5%,已持有的不加買,閒置資金留現金。出場:移動停損距離 = 訊號日 ATR% × 4(最小 4%、最大 15%,進場後固定),收盤跌破「進場後最高收盤 ×(1 − 距離)」就賣;另外最高收盤曾達進場價 +6% 後,收盤跌破進場價 +0.5% 也賣,兩者誰先觸發用誰。評分條件是看過資料才挑的,實際表現可能較低。</p>
         <p>近5日波動 ≤ 平常 ×:近 5 日平均真實區間 ÷ 之前 60 日平均。市值以集保總股數 × 收盤價估算。資料僅供研究參考,不構成投資建議。</p>
       </details>
     </section>
@@ -218,7 +218,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 const $ = id => document.getElementById(id);
 const KEY = 'chiplens-filters-v6';   // v6:V3C-PRO(停損上限 15%、不勾量比),舊的設定不沿用
 const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acAbove','acS200','acS200v','acPos','acPosDd','acPosAtr','acLim','acLimv','acExInd','exK','exMin','exMax','exBe','exBeKeep','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acTv','acTvv','acSc','acScv','scAtr','scDd','scTv','scPx','vc','slope','res','e20','e60','q'];
-let DATA = null, rows = [], sortKey = '_score', sortDir = -1, view = 'ratio';
+let DATA = null, rows = [], sortKey = '_rank', sortDir = 1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
 const QUOTE_URL = 'https://cool-wind-aee2tw-quote.farrell0701.workers.dev/quote'; // 留空字串 = 關閉即時功能
@@ -267,7 +267,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 
 function streakOf(a){ let k=0; for(let i=a.length-1;i>0;i--){ if(a[i]!=null && a[i-1]!=null && a[i]>a[i-1]) k++; else break; } return k; }
 
-// 依使用者勾選的條件,在最近 21 根 K 棒內找最後一次符合的日子,回傳 {d: 幾日前, sc: 當天分數}
+// 依使用者勾選的條件,在最近 21 根 K 棒內找最後一次符合的日子,回傳 {d: 幾日前, sc: 當天分數, cnt: 21 根內符合幾次}
 function acCfg(){
   const on = id => $(id).checked, v = id => num($(id).value);
   return {bull:on('acBull'), above:on('acAbove'), s200:on('acS200')?v('acS200v'):null, bbg:on('acBbg')?v('acBbgv'):null,
@@ -311,6 +311,7 @@ function acFind(s){
   const C = ACC, n = g.s200.length;
   if (C.exInd && EX_IND.includes(s.industry)) return null;
   const ge = (x,t) => t==null || (x!=null && x>=t), le = (x,t) => t==null || (x!=null && x<=t), gt = (x,t) => t==null || (x!=null && x>t);
+  let last = null, cnt = 0;
   for (let i=n-1;i>=0;i--){
     if (C.bull && !g.bl[i]) continue;
     if (C.above && !(g.ba && g.ba[i])) continue;
@@ -334,10 +335,13 @@ function acFind(s){
     if (C.tv != null && !(g.tv && g.tv[i] != null && g.tv[i] >= C.tv)) continue;
     const sc = acScore(s,g,i);
     if (C.sc != null && sc < C.sc) continue;
-    return {d:n-1-i, sc, ml:(g.ml ? g.ml[i] : null), back, ex:acExit(s,g,i),
+    cnt++;
+    if (last) continue;
+    last = {d:n-1-i, sc, ml:(g.ml ? g.ml[i] : null), back, ex:acExit(s,g,i),
             grp:(C.g1 || C.g2) ? ((g.vr[i]!=null && g.vr[i] > C.vr) ? '爆量' : '非爆量') : null};
   }
-  return null;
+  if (last) last.cnt = cnt;
+  return last;
 }
 
 function derive(){
@@ -351,7 +355,7 @@ function derive(){
     s._delta = (s._p != null && s._prev != null) ? +(s._p - s._prev).toFixed(2) : null;
     s._wk = (n > 1 && a[n-1] != null && a[n-2] != null) ? +(a[n-1]-a[n-2]).toFixed(2) : null;
     s._streak = streakOf(a);
-    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._ml = A ? A.ml : null; s._grp = A ? A.grp : null;
+    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._ml = A ? A.ml : null; s._grp = A ? A.grp : null; s._vbN = A ? A.cnt : null;
     s._back = A ? A.back : false; s._ex = A ? A.ex : null; s._px = s._ex ? s._ex.px : null; s._stopD = s._ex ? s._ex.dist : null;
     const L = liveOn ? live[s.code] : null;
     s._c = L ? L.price : s.close;
@@ -393,7 +397,7 @@ const COLS = [
   {k:'_streak', t:'連增週'},
   {k:'_weeks', t:'近 12 週', nosort:true},
   {k:'_ml', t:'模型預測'},
-  {k:'_score', t:'Accum 分數'},
+  {k:'_rank', t:'策略排序'},
   {k:'_stopD', t:'停損線'},
   {k:'mcap', t:'市值(億)'},
   {k:'_tech', t:'技術型態', l:true, nosort:true},
@@ -409,7 +413,7 @@ function header(){
     return `<th class="${c.l?'l':''}"${s}>${t}</th>`;
   }).join('');
   $('thr').querySelectorAll('th[data-k]').forEach(th => {
-    const go = () => { const k = th.dataset.k; if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = k==='code' ? 1 : -1; } render(); };
+    const go = () => { const k = th.dataset.k; if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = (k==='code' || k==='_rank') ? 1 : -1; } render(); };
     th.addEventListener('click', go);
     th.addEventListener('keydown', e => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); go(); } });
   });
@@ -443,11 +447,14 @@ function priceSpark(s){
   return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="近60日收盤走勢"><polyline points="${pts}" fill="none" stroke="var(${col})" stroke-width="1.4"/><circle cx="${last[0]}" cy="${last[1]}" r="2" fill="var(${col})"/></svg>`;
 }
 
+// 「已出現幾次」:最近約 21 個交易日內訊號出現的次數(舊資料沒有次數就不顯示)
+const times = n => n == null ? '' : `・已出現${n}次`;
+const TIP = ' title="最近 21 個交易日內這個訊號出現的次數"';
 function techTags(s){
   const t = [];
-  if (s.ab != null) t.push(`<span class="tag ${s.ab<=1?'hot':'on'}">A→B ${s.ab===0?'今日':s.ab+'日前'}</span>`);
-  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}">V3C-PRO ${s._vb===0?'今日':s._vb+'日前'}${s._back?'・[回]':''}${s._grp?'・'+s._grp+'組':''}</span>`);
-  if (s.vcp != null) t.push(`<span class="tag ${s.vcp<=1?'hot':'on'}">收斂突破 ${s.vcp===0?'今日':s.vcp+'日前'}</span>`);
+  if (s.ab != null) t.push(`<span class="tag ${s.ab<=1?'hot':'on'}"${TIP}>A→B ${s.ab===0?'今日':s.ab+'日前'}${times(s.abN)}</span>`);
+  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}"${TIP}>V3C-PRO ${s._vb===0?'今日':s._vb+'日前'}${times(s._vbN)}${s._back?'・[回]':''}${s._grp?'・'+s._grp+'組':''}</span>`);
+  if (s.vcp != null) t.push(`<span class="tag ${s.vcp<=1?'hot':'on'}"${TIP}>收斂突破 ${s.vcp===0?'今日':s.vcp+'日前'}${times(s.vcpN)}</span>`);
   if (s.res120 != null && s.res120 <= 0) t.push('<span class="tag on">創120日高</span>');
   const L = liveOn ? live[s.code] : null;
   if (L && s.res120 > 0 && s.close && L.price > s.close * (1 + s.res120/100)) t.push('<span class="tag hot">盤中創120日高</span>');
@@ -467,13 +474,16 @@ function tvLink(s){ return `https://tw.tradingview.com/chart/?symbol=${s.market=
 function render(skipLive){
   derive(); header();
   rows = DATA.stocks.filter(pass);
+  // 策略排序:有 V3C-PRO 訊號的股票依「分數高 → 實際股價低 → 大戶比例變化大」排名(1 = 最優先買進)
+  const byStrat = (a,b) => (b._score - a._score) || ((a._px ?? 1e9) - (b._px ?? 1e9)) || ((b._delta ?? -1e9) - (a._delta ?? -1e9));
+  DATA.stocks.forEach(s => { s._rank = null; });
+  rows.filter(s => s._score != null).sort(byStrat).forEach((s,i) => { s._rank = i + 1; });
   const key = sortKey;
   rows.sort((a,b) => {
     const x = key==='code' ? a.code : a[key], y = key==='code' ? b.code : b[key];
     if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
     const c = (x > y ? 1 : x < y ? -1 : 0) * sortDir;
     if (c) return c;
-    if (key === '_score' && a._px != null && b._px != null && a._px !== b._px) return a._px - b._px;   // 同分:實際股價低的在前
     const u = a._delta, w = b._delta;   // 相同時,大戶比例變化大的在前
     return (u == null ? 1 : w == null ? -1 : (w - u));
   });
@@ -487,7 +497,7 @@ function render(skipLive){
     <td><span class="streak ${s._streak>=3?'s3':''}">${s._streak}</span></td>
     <td>${weekBars(s)}</td>
     <td class="num">${s._ml==null?'<span class="ind">—</span>':`<b class="${cls(s._ml)}">${sign(s._ml,1)}%</b>`}</td>
-    <td class="num">${s._score==null?'<span class="ind">—</span>':`<span class="streak ${s._score>=2?'s3':''}">${s._score}</span><div class="ind num">/ 4</div>`}</td>
+    <td class="num">${s._rank==null?'<span class="ind">—</span>':`<span class="streak ${s._rank<=8?'s3':''}">${s._rank}</span><div class="ind num">${s._score} 分</div>`}</td>
     <td class="num">${stopCell(s)}</td>
     <td class="num">${s.mcap==null?'—':Math.round(s.mcap).toLocaleString()}<div class="ind num">${s.mcapRank?'#'+s.mcapRank:''}</div></td>
     <td class="l">${techTags(s)}</td>
