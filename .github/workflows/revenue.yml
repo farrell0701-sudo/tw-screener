@@ -16,7 +16,7 @@ concurrency:
 jobs:
   revenue:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 345
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,14 +24,21 @@ jobs:
           python-version: "3.11"
       - name: 安裝套件
         run: pip install pandas requests lxml
-      - name: 下載月營收(MOPS)
+      - name: 取回之前已抓的部分(第一次沒有,會略過)
+        run: |
+          git clone -q --depth 1 -b revenue-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_revenue || mkdir -p out_revenue
+          rm -rf out_revenue/.git
+      - name: 下載月營收(MOPS,不行改 FinMind)
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
         run: python scripts/fetch_revenue.py
       - name: 存到分支 revenue-data
+        if: always()
         run: |
           cd out_revenue
           git init -q -b revenue-data
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -q -m "月營收 $(date -u +'%Y-%m-%d %H:%M')"
+          git commit -q -m "月營收 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" revenue-data
