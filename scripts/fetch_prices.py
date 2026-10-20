@@ -38,6 +38,14 @@ def download(tickers: list[str], period: str, adjust: bool = False) -> pd.DataFr
     return pd.DataFrame()
 
 
+def done(d: pd.DataFrame) -> pd.DataFrame:
+    """盤中(台灣時間 14:30 前)Yahoo 會給今天還沒收盤的半根 K 棒,不存;收盤後的更新會補上完整的那根。"""
+    now = pd.Timestamp.now(tz="Asia/Taipei")
+    if now.hour * 60 + now.minute < 14 * 60 + 30:
+        return d[d.index < now.tz_localize(None).normalize()]
+    return d
+
+
 def current(f: Path) -> bool:
     """已是新格式(有 AdjClose)且最後一筆在 7 天內:只需補最近 10 天;否則重抓 3 年。"""
     if not f.exists():
@@ -95,7 +103,7 @@ def main() -> None:
                 f = OUT_DIR / f"{code}.csv"
                 if period == "10d":
                     d = merge(pd.read_csv(f, index_col=0, parse_dates=True), d)
-                d.sort_index().tail(600).round(4).to_csv(f)
+                done(d.sort_index()).tail(600).round(4).to_csv(f)
             time.sleep(2)
             print(f"[fetch_prices] {period}: {min(i + BATCH, len(group))}/{len(group)}")
 
@@ -115,7 +123,7 @@ def fetch_index() -> None:
     if f.exists():   # 同個股:保留舊檔有、這次沒抓到的日子
         d = pd.concat([pd.read_csv(f, index_col=0, parse_dates=True), d])
         d = d[~d.index.duplicated(keep="last")].sort_index()
-    d.round(2).to_csv(f)
+    done(d).round(2).to_csv(f)
     print(f"[fetch_prices] 加權指數 {len(d)} 筆")
 
 
