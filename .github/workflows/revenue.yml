@@ -1,0 +1,37 @@
+name: 下載歷史月營收(回測用)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [claude/project-thread-iak87v]
+    paths: [scripts/fetch_revenue.py, .github/workflows/revenue.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: revenue
+  cancel-in-progress: false
+
+jobs:
+  revenue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests lxml
+      - name: 下載月營收(MOPS)
+        run: python scripts/fetch_revenue.py
+      - name: 存到分支 revenue-data
+        run: |
+          cd out_revenue
+          git init -q -b revenue-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "月營收 $(date -u +'%Y-%m-%d %H:%M')"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" revenue-data
