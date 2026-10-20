@@ -63,8 +63,9 @@ def merge(prev: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
             prev["AdjClose"] *= r
     else:
         print(f"[fetch_prices] 新舊資料沒有重疊日 {d0.date()},還原比例可能不連續", file=sys.stderr)
-    out = pd.concat([prev[prev.index < d0], new])
-    return out[~out.index.duplicated(keep="last")]
+    # 舊資料有、新資料沒有的日子要保留(Yahoo 偶爾會暫時少給最近一天)
+    out = pd.concat([prev, new])
+    return out[~out.index.duplicated(keep="last")].sort_index()
 
 
 def main() -> None:
@@ -110,7 +111,11 @@ def fetch_index() -> None:
     d = d.dropna(subset=["Close"])[["Open", "High", "Low", "Close", "Volume"]].copy()
     d.index = pd.to_datetime(d.index).tz_localize(None).normalize()
     d.index.name = "Date"
-    d.round(2).to_csv(OUT_DIR / "TAIEX.csv")
+    f = OUT_DIR / "TAIEX.csv"
+    if f.exists():   # 同個股:保留舊檔有、這次沒抓到的日子
+        d = pd.concat([pd.read_csv(f, index_col=0, parse_dates=True), d])
+        d = d[~d.index.duplicated(keep="last")].sort_index()
+    d.round(2).to_csv(f)
     print(f"[fetch_prices] 加權指數 {len(d)} 筆")
 
 
