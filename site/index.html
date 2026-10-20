@@ -223,6 +223,7 @@ let DATA = null, rows = [], sortKey = '_rank', sortDir = 1, view = 'ratio';
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
 const QUOTE_URL = 'https://cool-wind-aee2tw-quote.farrell0701.workers.dev/quote'; // 留空字串 = 關閉即時功能
 const LIVE_MAX = 20;        // 表格前幾檔要查即時價
+const LIVE_TOP = 40;        // 盤中候選依預估排序,前幾名每分鐘更新
 const LIVE_CALL = 50;       // 每次最多查幾檔(Worker 上限 50)
 const LIVE_RATE = 55;       // 每 60 秒最多查幾檔(富果免費版每分鐘 60 次)
 const LIVE_TTL = 45000;     // 同一檔 45 秒內不重複查
@@ -241,7 +242,7 @@ function liveStatus(msg){
   const ts = Object.values(live).map(x => x.time).filter(Boolean), n = Object.keys(live).length;
   const last = ts.length ? hhmmss(Math.max(...ts)) : '';
   const nc = DATA ? liveCands().length : 0;
-  const base = (msg || (marketOpen() ? '盤中每分鐘更新' : '非盤中,顯示最後成交')) + (nc ? ` · V3C-PRO 盤中候選 ${nc} 檔` : '');
+  const base = (msg || (marketOpen() ? '盤中每分鐘更新' : '非盤中,顯示最後成交')) + (nc ? ` · V3C-PRO 盤中候選 ${nc} 檔(接近新高的前 ${LIVE_TOP} 名每分鐘更新)` : '');
   el.textContent = base + (n ? ` · ${n} 檔` : '') + (last ? ` · 報價時間 ${last}` : '') + (liveErr ? ` · ⚠ ${liveErr}` : '');
   el.className = liveErr ? 'err' : '';
 }
@@ -253,10 +254,14 @@ async function fetchLive(){
   const budget = Math.min(LIVE_CALL, LIVE_RATE - liveLog.reduce((a, x) => a + x[1], 0));
   // 表格前段 + 盤中可能出現 V3C-PRO 訊號的候選股(越久沒查的越先查)
   const older = (a, b) => (live[a] ? live[a].at : 0) - (live[b] ? live[b].at : 0);
-  const want = [...new Set([...rows.slice(0, LIVE_MAX).map(s => s.code), ...liveCands()])].filter(stale).sort(older);
-  // 還沒觸發停損的訊號股也要看今天有沒有跌破停損線;每次留 10 檔給它們
-  const hold = DATA.stocks.filter(s => s._ex && s._ex.hit == null && !want.includes(s.code)).map(s => s.code).filter(stale).sort(older);
-  const nh = Math.min(hold.length, 10, Math.max(0, budget)), codes = [...want.slice(0, Math.max(0, budget - nh)), ...hold.slice(0, nh)];
+  // 優先順序:接近新高的候選依預估排序前 LIVE_TOP 名 + 表格前段(每分鐘都更新)→ 還沒觸發停損的訊號股(每次最多 10 檔)→ 其餘候選輪流
+  // 「接近」= 上次查到的價格離 5 日新高 2% 以內;還沒查過的會排在其餘候選最前面,第一輪查完後就知道誰接近
+  const all = liveCands(), cands = all.map(x => x.code);
+  const top = new Set([...all.filter(x => x.near).slice(0, LIVE_TOP).map(x => x.code), ...rows.slice(0, LIVE_MAX).map(s => s.code)]);
+  const t1 = [...top].filter(stale).sort(older);
+  const hold = DATA.stocks.filter(s => s._ex && s._ex.hit == null && !top.has(s.code)).map(s => s.code).filter(stale).sort(older).slice(0, 10);
+  const rest = cands.filter(c => !top.has(c) && !hold.includes(c) && stale(c)).sort(older);
+  const codes = [...t1, ...hold, ...rest].slice(0, Math.max(0, budget));
   if (!codes.length) { liveStatus(); return; }
   liveLog.push([now, codes.length]);
   liveBusy = true; liveStatus('更新中…');
@@ -373,9 +378,13 @@ function liveCands(){
     const T = C.t, pxLo = nx.m5 / nx.k;   // 要創新高,實際股價至少要到這裡
     const scMax = (T.atr != null && atrLo <= T.atr ? 1 : 0) + (T.dd != null && ddLo <= T.dd ? 1 : 0) + (T.tv != null ? 1 : 0) + (T.px != null && (C.nh ? pxLo : 0) < T.px ? 1 : 0);
     if (C.sc != null && scMax < C.sc) continue;
-    out.push([s.code, nx.m5/nx.c1]);
+    // 預估排序(同策略:分數高 → 股價低),價格用即時價,還沒查過就用剛好創新高的價格
+    const L = live[s.code], pe = Math.max(L && L.price != null ? L.price : 0, pxLo), pa = pe * nx.k;
+    const sc = (okLe(nx.atr/nx.c1*100, T.atr)?1:0) + (okLe((1 - pa/nx.h249)*100, T.dd)?1:0)
+             + (okLt(nx.v19/19 * pe / 1e8, T.tv)?1:0) + (okLt(pe, T.px)?1:0);
+    out.push({code: s.code, sc, pe, near: !!(L && L.price != null && L.price >= pxLo * 0.98)});   // near:即時價離 5 日新高 2% 以內
   }
-  return out.sort((a, b) => a[1] - b[1]).map(x => x[0]);
+  return out.sort((a, b) => b.sc - a.sc || a.pe - b.pe);
 }
 
 function acFind(s){
