@@ -102,7 +102,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <label class="check"><input type="checkbox" id="scAnd" data-def="0"> 須同時符合(不勾 = 符合任一)</label>
         <div class="row"><label for="scopeDays">訊號在近幾日內</label>
           <select id="scopeDays" data-def="5"><option>0</option><option>1</option><option>3</option><option selected>5</option><option>10</option><option>20</option></select></div>
-        <div class="sub">兩項都不勾 = 顯示全部股票。Accum V3C-PRO 的條件在下方「Accum V3C-PRO 條件」調整;A→B 突破使用固定規則。</div>
+        <div class="sub">兩項都不勾 = 顯示全部股票。盤中會用即時價把「今天」當成一根新 K 棒判斷 V3C-PRO(標「盤中」,成交值用到目前為止的量,大盤用昨收判斷),收盤後資料更新前也一樣。Accum V3C-PRO 的條件在下方「Accum V3C-PRO 條件」調整;A→B 突破使用固定規則。</div>
       </fieldset>
       <fieldset>
         <legend>大戶籌碼</legend>
@@ -222,12 +222,15 @@ let DATA = null, rows = [], sortKey = '_rank', sortDir = 1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
 const QUOTE_URL = 'https://cool-wind-aee2tw-quote.farrell0701.workers.dev/quote'; // 留空字串 = 關閉即時功能
-const LIVE_MAX = 40;        // 每次最多查幾檔(富果免費版每分鐘 60 次)
+const LIVE_MAX = 20;        // 表格前幾檔要查即時價
+const LIVE_CALL = 50;       // 每次最多查幾檔(Worker 上限 50)
+const LIVE_RATE = 55;       // 每 60 秒最多查幾檔(富果免費版每分鐘 60 次)
 const LIVE_TTL = 45000;     // 同一檔 45 秒內不重複查
 const LIVE_EVERY = 60000;   // 盤中自動更新間隔(毫秒)
 const LIVE_KEY = 'chiplens-live-v1';
 let liveOn = true, liveBusy = false, liveErr = null, liveTimer = null;
-const live = {};            // 代號 -> {price, chg, vol, time, at}
+const live = {};            // 代號 -> {price, chg, open, high, low, vol(張), time, at}
+let liveLog = [];           // 最近 60 秒查過的 [時間, 檔數],控制頻率
 
 function marketOpen(){ const t = new Date(Date.now() + 8*36e5), d = t.getUTCDay(), m = t.getUTCHours()*60 + t.getUTCMinutes(); return d >= 1 && d <= 5 && m >= 540 && m <= 815; }
 function hhmmss(t){ if (t == null) return ''; const ms = t > 1e14 ? t/1000 : t; return new Date(ms + 8*36e5).toISOString().slice(11,19); }
@@ -237,15 +240,25 @@ function liveStatus(msg){
   if (!liveOn) { el.textContent = '即時報價已關閉'; el.className = ''; return; }
   const ts = Object.values(live).map(x => x.time).filter(Boolean), n = Object.keys(live).length;
   const last = ts.length ? hhmmss(Math.max(...ts)) : '';
-  const base = msg || (marketOpen() ? '盤中每分鐘更新' : '非盤中,顯示最後成交');
+  const nc = DATA ? liveCands().length : 0;
+  const base = (msg || (marketOpen() ? '盤中每分鐘更新' : '非盤中,顯示最後成交')) + (nc ? ` · V3C-PRO 盤中候選 ${nc} 檔` : '');
   el.textContent = base + (n ? ` · ${n} 檔` : '') + (last ? ` · 報價時間 ${last}` : '') + (liveErr ? ` · ⚠ ${liveErr}` : '');
   el.className = liveErr ? 'err' : '';
 }
 async function fetchLive(){
   if (!QUOTE_URL || !liveOn || liveBusy || !DATA || document.hidden) return;
   const open = marketOpen(), now = Date.now();
-  const codes = rows.slice(0, LIVE_MAX).map(s => s.code).filter(c => { const x = live[c]; return !x || (open && now - x.at >= LIVE_TTL); });
+  const stale = c => { const x = live[c]; return !x || (open && now - x.at >= LIVE_TTL); };
+  liveLog = liveLog.filter(x => now - x[0] < 60000);
+  const budget = Math.min(LIVE_CALL, LIVE_RATE - liveLog.reduce((a, x) => a + x[1], 0));
+  // 表格前段 + 盤中可能出現 V3C-PRO 訊號的候選股(越久沒查的越先查)
+  const older = (a, b) => (live[a] ? live[a].at : 0) - (live[b] ? live[b].at : 0);
+  const want = [...new Set([...rows.slice(0, LIVE_MAX).map(s => s.code), ...liveCands()])].filter(stale).sort(older);
+  // 還沒觸發停損的訊號股也要看今天有沒有跌破停損線;每次留 10 檔給它們
+  const hold = DATA.stocks.filter(s => s._ex && s._ex.hit == null && !want.includes(s.code)).map(s => s.code).filter(stale).sort(older);
+  const nh = Math.min(hold.length, 10, Math.max(0, budget)), codes = [...want.slice(0, Math.max(0, budget - nh)), ...hold.slice(0, nh)];
   if (!codes.length) { liveStatus(); return; }
+  liveLog.push([now, codes.length]);
   liveBusy = true; liveStatus('更新中…');
   try {
     const r = await fetch(QUOTE_URL + '?codes=' + codes.join(','));
@@ -289,30 +302,90 @@ function acScore(s,g,i){
 const EX_IND = ['生技醫療業', '通信網路業'];
 // V3C-PRO 出場:從訊號日收盤(進場價)往後用日收盤(還原價)推算,回傳目前停損線、是否已進入保本、是否已觸發;
 // 價格最後依最新一天的 實際收盤 ÷ 還原收盤 換算成實際股價
-function acExit(s, g, i){
+function acExit(s, g, i, LB, off){
   const E = ACC.ex, px = g.c ? g.c[i] : null, atr = g.atr[i];
   if (px == null || atr == null || E.k == null) return null;
   const dist = Math.min(Math.max(atr * E.k, E.min ?? 0), E.max ?? 100) / 100;
   const n = g.c.length;
   let peak = px, armed = false, hit = null;
-  g.c.slice(i + 1).forEach((c, k) => {
+  const cs = g.c.slice(i + 1).concat(LB ? [LB.p] : []);   // 盤中:今天的即時價也算一根
+  cs.forEach((c, k) => {
     if (hit != null || c == null) return;
     peak = Math.max(peak, c);
     if (E.be != null && peak >= px * (1 + E.be/100)) armed = true;
-    if (c < peak * (1 - dist) || (armed && E.keep != null && c < px * (1 + E.keep/100))) hit = n - 2 - i - k;
+    if (c < peak * (1 - dist) || (armed && E.keep != null && c < px * (1 + E.keep/100))) hit = cs.length - 1 - k + (LB ? 0 : off || 0);
   });
   const trail = peak * (1 - dist), be = armed && E.keep != null ? px * (1 + E.keep/100) : null;
-  const r = g.rc && g.rc[n-1] != null && g.c[n-1] ? g.rc[n-1] / g.c[n-1] : 1;
+  const r = LB ? 1 / LB.nx.k : g.rc && g.rc[n-1] != null && g.c[n-1] ? g.rc[n-1] / g.c[n-1] : 1;
   return {px: g.rc && g.rc[i] != null ? g.rc[i] : px, dist: dist*100, stop: (be != null ? Math.max(trail, be) : trail) * r, armed, hit,
           beAt: E.be != null ? px * (1 + E.be/100) * r : null};
 }
+// ── 盤中:用即時價當「今天這一根」判斷 V3C-PRO ──
+// 舊版條件(量比、布林、分組、加權 > EMA60)與 10/20 日新高沒有盤中資料,勾選時不做盤中判斷。
+const twDate = t => { const ms = t > 1e14 ? t/1000 : t; return new Date(ms + 8*36e5).toISOString().slice(0,10); };
+let LIVE_DAY = '';          // 即時報價的最新日期;比資料日期新 = 今天已經多一根(還沒查到報價的股票也一樣往後推一天)
+function liveDay(){ let d = ''; if (liveOn) for (const c in live){ const t = live[c].time; if (t != null){ const x = twDate(t); if (x > d) d = x; } } return d; }
+function liveBar(s){
+  const L = liveOn ? live[s.code] : null, nx = s.ac && s.ac.nx;
+  if (!L || !nx || L.price == null || L.time == null || !s.date || twDate(L.time) <= s.date) return null;
+  const k = nx.k, pr = L.price;
+  return {pr, p: pr*k, H: (L.high ?? pr)*k, Lo: (L.low ?? pr)*k, vol: (L.vol ?? 0)*1000, nx};
+}
+function liveOk(){
+  const C = ACC;
+  return !(C.above || C.bbg != null || C.bbs != null || C.spk != null || C.g1 || C.g2 || (C.nh && C.nh !== '5'));
+}
+function bullNx(){ const b = DATA.bullNx; return !ACC.bull || (b != null && b.last > b.thr); }
+function acLiveEval(s, B){
+  const C = ACC, T = C.t, nx = B.nx, p = B.p;
+  if (!liveOk() || !bullNx()) return null;
+  const tr = Math.max(B.H, nx.c1) - Math.min(B.Lo, nx.c1), atr = nx.atr + (tr - nx.atr)/14, atrp = atr/p*100;
+  const ddh = (1 - p/Math.max(nx.h249, B.H))*100, r1 = (p/nx.c1 - 1)*100;
+  const tv = (nx.v19 + B.vol)/20 * B.pr / 1e8, e = nx.e200 + 2/201*(p - nx.e200), s200 = (e/nx.e200b - 1)*10;
+  let back = false;
+  if (C.pos){
+    const okD = C.posDd != null && ddh <= C.posDd, okA = C.posAtr != null && atrp <= C.posAtr;
+    if (!okD && !okA) return null;
+    back = !okD;
+  }
+  if (C.lim != null && !(r1 < C.lim)) return null;
+  if (C.s200 != null && !(s200 >= C.s200)) return null;
+  if (C.nh && !(p > nx.m5)) return null;
+  if (C.tv != null && !(tv >= C.tv)) return null;
+  const sc = (okLe(atrp,T.atr)?1:0) + (okLe(ddh,T.dd)?1:0) + (okLt(tv,T.tv)?1:0) + (okLt(B.pr,T.px)?1:0);
+  if (C.sc != null && sc < C.sc) return null;
+  const E = C.ex, dist = Math.min(Math.max(atrp * E.k, E.min ?? 0), E.max ?? 100) / 100;
+  return {d:0, sc, ml:null, back, live:true,
+          ex:{px:B.pr, dist:dist*100, stop:B.pr*(1-dist), armed:false, hit:null, beAt:E.be != null ? B.pr*(1+E.be/100) : null}};
+}
+// 盤中候選:用昨天的狀態粗篩「今天漲到漲停以內有機會成立」的股票,即時報價會優先查這些
+function liveCands(){
+  if (!DATA || !liveOk() || !bullNx() || !$('scAc').checked) return [];
+  const C = ACC, out = [];
+  for (const s of DATA.stocks){
+    const nx = s.ac && s.ac.nx; if (!nx) continue;
+    if (C.exInd && EX_IND.includes(s.industry)) continue;
+    const pm = nx.c1 * (1 + (C.lim ?? 10)/100);
+    if (C.nh && !(nx.m5 < pm)) continue;
+    if (C.s200 != null && !(((nx.e200 + 2/201*(pm - nx.e200))/nx.e200b - 1)*10 >= C.s200)) continue;
+    const atrLo = nx.atr/nx.c1*100 * (13/14) / (1 + (C.lim ?? 10)/100), ddLo = (1 - pm/nx.h249)*100;   // 今天可能的最小值
+    if (C.pos && !((C.posDd != null && ddLo <= C.posDd) || (C.posAtr != null && atrLo <= C.posAtr))) continue;
+    const T = C.t, pxLo = nx.m5 / nx.k;   // 要創新高,實際股價至少要到這裡
+    const scMax = (T.atr != null && atrLo <= T.atr ? 1 : 0) + (T.dd != null && ddLo <= T.dd ? 1 : 0) + (T.tv != null ? 1 : 0) + (T.px != null && (C.nh ? pxLo : 0) < T.px ? 1 : 0);
+    if (C.sc != null && scMax < C.sc) continue;
+    out.push([s.code, nx.m5/nx.c1]);
+  }
+  return out.sort((a, b) => a[1] - b[1]).map(x => x[0]);
+}
+
 function acFind(s){
   const g = s.ac; if (!g || !g.s200) return null;
   const C = ACC, n = g.s200.length;
   if (C.exInd && EX_IND.includes(s.industry)) return null;
   const ge = (x,t) => t==null || (x!=null && x>=t), le = (x,t) => t==null || (x!=null && x<=t), gt = (x,t) => t==null || (x!=null && x>t);
-  let last = null, cnt = 0;
-  for (let i=n-1;i>=0;i--){
+  const LB = liveBar(s), off = s.date && LIVE_DAY > s.date ? 1 : 0;   // 今天已開盤:資料裡的最後一根變成「1 日前」
+  let last = LB ? acLiveEval(s, LB) : null, cnt = last ? 1 : 0;
+  for (let i=n-1;i>=off;i--){   // 盤中少看最舊一根,維持 21 個交易日
     if (C.bull && !g.bl[i]) continue;
     if (C.above && !(g.ba && g.ba[i])) continue;
     let back = false;
@@ -337,7 +410,7 @@ function acFind(s){
     if (C.sc != null && sc < C.sc) continue;
     cnt++;
     if (last) continue;
-    last = {d:n-1-i, sc, ml:(g.ml ? g.ml[i] : null), back, ex:acExit(s,g,i),
+    last = {d:n-1-i+off, sc, ml:(g.ml ? g.ml[i] : null), back, ex:acExit(s,g,i,LB,off),
             grp:(C.g1 || C.g2) ? ((g.vr[i]!=null && g.vr[i] > C.vr) ? '爆量' : '非爆量') : null};
   }
   if (last) last.cnt = cnt;
@@ -345,7 +418,7 @@ function acFind(s){
 }
 
 function derive(){
-  ACC = acCfg();
+  ACC = acCfg(); LIVE_DAY = liveDay();
   const lvl = $('lvl').value, w = Math.max(1, Math.min(12, num($('cmpw').value) || 4));
   for (const s of DATA.stocks){
     const a = s[lvl] || [];
@@ -355,7 +428,7 @@ function derive(){
     s._delta = (s._p != null && s._prev != null) ? +(s._p - s._prev).toFixed(2) : null;
     s._wk = (n > 1 && a[n-1] != null && a[n-2] != null) ? +(a[n-1]-a[n-2]).toFixed(2) : null;
     s._streak = streakOf(a);
-    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._ml = A ? A.ml : null; s._grp = A ? A.grp : null; s._vbN = A ? A.cnt : null;
+    const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._ml = A ? A.ml : null; s._grp = A ? A.grp : null; s._vbN = A ? A.cnt : null; s._vbLive = !!(A && A.live);
     s._back = A ? A.back : false; s._ex = A ? A.ex : null; s._px = s._ex ? s._ex.px : null; s._stopD = s._ex ? s._ex.dist : null;
     const L = liveOn ? live[s.code] : null;
     s._c = L ? L.price : s.close;
@@ -453,7 +526,7 @@ const TIP = ' title="最近 21 個交易日內這個訊號出現的次數"';
 function techTags(s){
   const t = [];
   if (s.ab != null) t.push(`<span class="tag ${s.ab<=1?'hot':'on'}"${TIP}>A→B ${s.ab===0?'今日':s.ab+'日前'}${times(s.abN)}</span>`);
-  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}"${TIP}>V3C-PRO ${s._vb===0?'今日':s._vb+'日前'}${times(s._vbN)}${s._back?'・[回]':''}${s._grp?'・'+s._grp+'組':''}</span>`);
+  if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}"${TIP}>V3C-PRO ${s._vbLive?'盤中':s._vb===0?'今日':s._vb+'日前'}${times(s._vbN)}${s._back?'・[回]':''}${s._grp?'・'+s._grp+'組':''}</span>`);
   if (s.vcp != null) t.push(`<span class="tag ${s.vcp<=1?'hot':'on'}"${TIP}>收斂突破 ${s.vcp===0?'今日':s.vcp+'日前'}${times(s.vcpN)}</span>`);
   if (s.res120 != null && s.res120 <= 0) t.push('<span class="tag on">創120日高</span>');
   const L = liveOn ? live[s.code] : null;
@@ -524,7 +597,7 @@ function init(d){
   try { liveOn = localStorage.getItem(LIVE_KEY) !== 'off'; } catch(e){}
   $('liveBtn').setAttribute('aria-pressed', liveOn);
   load(); render();
-  clearInterval(liveTimer); liveTimer = setInterval(() => { if (marketOpen()) fetchLive(); }, LIVE_EVERY);
+  clearInterval(liveTimer); liveTimer = setInterval(fetchLive, LIVE_EVERY);   // 收盤後也會把還沒查過的候選股查完(每檔一次)
 }
 
 $('apply').addEventListener('click', render);

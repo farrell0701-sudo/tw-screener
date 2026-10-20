@@ -135,6 +135,7 @@ def vcp_signals(o, h, l, c, v, P):
 
 BULL = {}    # 日期 -> 大盤 EMA60 是否上彎(EMA60 今 ÷ 20 日前 − 1 > 0,v3c 的大盤條件)
 ABOVE = {}   # 日期 -> 加權收盤是否 > EMA60(舊版 v3 另外要求,網頁可勾選)
+BULL_NX = {}  # 盤中判斷大盤條件用的門檻
 
 
 def load_bull():
@@ -146,6 +147,10 @@ def load_bull():
     e = ema(c, 60)
     s = np.full(len(e), np.nan)
     s[20:] = e[20:] / e[:-20] - 1
+    # 盤中用:下一根加權收盤要高於 thr,EMA60 才會比 20 日前高(EMA60_今 = EMA60_昨 + α(價 − EMA60_昨))
+    a = 2 / 61
+    BULL_NX.update(thr=round(float(e[-1] + (e[-20] - e[-1]) / a), 2), last=round(float(c[-1]), 2),
+                   date=d.index[-1].strftime("%Y-%m-%d"))
     idx = [(i, dt) for i, dt in enumerate(d.index) if i >= 80]
     return {dt: bool(s[i] > 0) for i, dt in idx}, {dt: bool(c[i] > e[i]) for i, dt in idx}
 
@@ -337,6 +342,11 @@ def tech(df):
     out["ac"] = ac_parts(o, h, l, c, v, df.index, rc)
     tvs = pd.Series(v).rolling(20).mean().values * rc / 1e8      # 20 日均量 × 實際收盤(億元),V3C-PRO 的成交值門檻
     out["ac"]["tv"] = [None if not np.isfinite(x) else round(float(x), 6) for x in tvs[max(0, n - SG_W):]]
+    if n >= 250:   # 盤中用即時價判斷「今天這一根」所需的前一天狀態(還原價;k = 還原 ÷ 實際)
+        r6 = lambda x: round(float(x), 6)
+        out["ac"]["nx"] = {"k": r6(c[-1] / rc[-1]), "c1": r6(c[-1]), "m5": r6(c[-5:].max()),
+                           "e200": r6(e200[-1]), "e200b": r6(e200[-10]), "atr": r6(atr[-1]),
+                           "h249": r6(h[-249:].max()), "v19": float(v[-19:].sum())}
     if MODEL:
         out["_mlX"] = ml_feats(h, l, c, v)
     return out
@@ -406,7 +416,7 @@ def main():
     tz = timezone(timedelta(hours=8))
     payload = {"updated": datetime.now(tz).strftime("%Y-%m-%d %H:%M"), "weeks": weeks,
                "abParams": AB_P, "vcpParams": VCP_P,
-               "bull": (BULL[max(BULL)] if BULL else None), "bullDate": (max(BULL).strftime("%Y-%m-%d") if BULL else None), "stocks": rows}
+               "bull": (BULL[max(BULL)] if BULL else None), "bullNx": BULL_NX or None, "bullDate": (max(BULL).strftime("%Y-%m-%d") if BULL else None), "stocks": rows}
     import os
     if os.environ.get("DEMO_NOTE"):
         payload["demo"] = os.environ["DEMO_NOTE"]
