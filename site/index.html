@@ -2,6 +2,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>籌碼雷達</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="籌碼雷達">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f151b" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
@@ -84,6 +91,30 @@ svg.spark{display:block}
 .note{color:var(--muted);font-size:12px;padding:12px 14px;line-height:1.7}
 details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* 手機(≤700px):篩選條件預設收起、結果改卡片 */
+.mob{display:none}
+#cards{display:none}
+.card{padding:10px 12px;border-bottom:1px solid var(--line)}
+.card .c1{display:flex;align-items:center;gap:10px}
+.card .rk{flex:none;width:34px;text-align:center}
+.card .nm{flex:1;min-width:0}
+.card .px{text-align:right;flex:none}
+.card .c2{display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0 4px 44px;font-size:12px;color:var(--muted)}
+.card .c2 b{font-family:var(--f-num);font-weight:600;color:var(--ink)}
+.card .tags{margin-left:42px}
+@media (max-width:700px){
+  .mob{display:block}
+  #fTog{width:100%;padding:10px 12px;font-size:15px;text-align:left;margin-bottom:10px}
+  form:not(.open){display:none}
+  .tbl{display:none}
+  #cards{display:block}
+  .rhead{padding:10px 12px}
+  #mSort{width:auto}
+  .seg[aria-label="週欄位顯示"]{display:none}   /* 卡片沒有週長條圖 */
+  input[type=number],select,input[type=search]{font-size:16px}   /* iOS 小於 16px 會在點選時自動放大 */
+  .wrap{padding-block:12px 32px}
+  h1{font-size:20px}
+}
 </style>
 
 <div class="wrap">
@@ -94,6 +125,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
   <div class="demo" id="demo" hidden></div>
 
   <div class="layout">
+    <div style="display:contents">
+    <button type="button" id="fTog" class="mob" aria-expanded="false" aria-controls="f">篩選條件 ▾</button>
     <form id="f" autocomplete="off">
       <fieldset>
         <legend>顯示範圍</legend>
@@ -180,6 +213,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
       </fieldset>
       <div class="btns"><button type="button" class="primary" id="apply">套用篩選</button><button type="button" id="reset">清除條件</button></div>
     </form>
+    </div>
 
     <section class="results">
       <div class="rhead">
@@ -190,6 +224,10 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
             <button type="button" id="liveBtn" aria-pressed="true">即時報價</button>
           </div>
         </div>
+        <label class="mob sub">排序 <select id="mSort" aria-label="排序">
+          <option value="_rank,1">策略排序</option><option value="_chg,-1">漲跌%</option><option value="_delta,-1">大戶比例變化</option>
+          <option value="_p,-1">大戶比例</option><option value="_streak,-1">連增週</option><option value="_ml,-1">模型預測</option>
+          <option value="mcap,-1">市值</option><option value="code,1">代號</option></select></label>
         <div class="seg" role="group" aria-label="週欄位顯示">
           <button type="button" id="vRatio" aria-pressed="true">比例</button>
           <button type="button" id="vDelta" aria-pressed="false">週變化</button>
@@ -199,6 +237,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <thead><tr id="thr"></tr></thead>
         <tbody id="tb"></tbody>
       </table></div>
+      <div id="cards"></div>
       <div class="empty" id="empty" hidden>沒有符合條件的股票。可以把「訊號在近幾日內」放寬、降低評分門檻,或取消勾選顯示範圍。</div>
       <details class="note"><summary>欄位與型態說明</summary>
         <p>大戶比例:集保戶股權分散表中,持股超過 100 張(100,001 股以上)、400 張以上或 1,000 張以上級距合計佔集保庫存的比例;網站只保留最新 12 週。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
@@ -570,7 +609,8 @@ function render(skipLive){
     return (u == null ? 1 : w == null ? -1 : (w - u));
   });
   const shown = rows.slice(0, 500);
-  $('tb').innerHTML = shown.map(s => `<tr>
+  if (MOB.matches) { $('tb').innerHTML = ''; $('cards').innerHTML = shown.map(card).join(''); }
+  else { $('cards').innerHTML = ''; $('tb').innerHTML = shown.map(s => `<tr>
     <td class="l stk"><span class="code">${esc(s.code)}</span><a href="${tvLink(s)}" target="_blank" rel="noopener">${esc(s.name)}</a><span class="mk">${s.market==='TPEX'?'櫃':'市'}</span><div class="ind">${esc(s.industry)}</div></td>
     <td class="num">${liveOn && live[s.code] ? `<span class="lvdot" title="報價時間 ${hhmmss(live[s.code].time)}">●</span>` : ''}${fmt(s._c)}${liveOn && live[s.code] && live[s.code].vol != null ? `<div class="ind num">量 ${Number(live[s.code].vol).toLocaleString()}</div>` : ''}</td>
     <td class="num ${cls(s._chg)}">${sign(s._chg)}</td>
@@ -584,11 +624,25 @@ function render(skipLive){
     <td class="num">${s.mcap==null?'—':Math.round(s.mcap).toLocaleString()}<div class="ind num">${s.mcapRank?'#'+s.mcapRank:''}</div></td>
     <td class="l">${techTags(s)}</td>
     <td class="num">${fmt(s.vc)}</td>
-    <td>${priceSpark(s)}</td></tr>`).join('');
+    <td>${priceSpark(s)}</td></tr>`).join(''); }
+  $('mSort').value = `${sortKey},${sortDir}`;
   $('empty').hidden = rows.length > 0;
   $('count').innerHTML = `符合 <b>${rows.length}</b> 檔 / 共 ${DATA.stocks.length} 檔${rows.length>500?'(顯示前 500)':''}`;
   save(); liveStatus();
   if (skipLive !== true) liveSoon();
+}
+
+// 手機卡片:名次、股票、現價,下方一行大戶與停損,最後是技術型態標籤
+const MOB = window.matchMedia('(max-width:700px)');
+function card(s){
+  const L = liveOn ? live[s.code] : null, x = s._ex;
+  const stop = !x ? '' : x.hit != null ? `<span>停損 <b>已觸發</b></span>` : `<span>停損 <b>${fmt(x.stop)}</b> −${fmt(x.dist,1)}%${x.armed?' 保本':''}</span>`;
+  return `<div class="card">
+    <div class="c1"><div class="rk num">${s._rank==null?'<span class="ind">—</span>':`<span class="streak ${s._rank<=8?'s3':''}">${s._rank}</span><div class="ind">${s._score} 分</div>`}</div>
+      <div class="nm stk"><span class="code">${esc(s.code)}</span><a href="${tvLink(s)}" target="_blank" rel="noopener">${esc(s.name)}</a><span class="mk">${s.market==='TPEX'?'櫃':'市'}</span><div class="ind">${esc(s.industry)}</div></div>
+      <div class="px num">${L ? '<span class="lvdot">●</span>' : ''}<b>${fmt(s._c)}</b><div class="${cls(s._chg)}">${sign(s._chg)}%</div></div></div>
+    <div class="c2"><span>大戶 <b>${fmt(s._p)}%</b> <span class="${cls(s._delta)}">Δ${sign(s._delta)}</span></span><span>連增 <b>${s._streak}</b> 週</span>${stop}${s._ml==null?'':`<span>模型 <b class="${cls(s._ml)}">${sign(s._ml,1)}%</b></span>`}</div>
+    <div class="tags">${techTags(s)}</div></div>`;
 }
 
 function save(){ try { const o = {}; FIELDS.forEach(id => { const el=$(id); o[id] = el.type==='checkbox' ? el.checked : el.value; }); o._view=view; localStorage.setItem(KEY, JSON.stringify(o)); } catch(e){} }
@@ -609,7 +663,11 @@ function init(d){
   clearInterval(liveTimer); liveTimer = setInterval(fetchLive, LIVE_EVERY);   // 收盤後也會把還沒查過的候選股查完(每檔一次)
 }
 
-$('apply').addEventListener('click', render);
+$('apply').addEventListener('click', () => { render(); if (MOB.matches) { setFold(false); $('count').scrollIntoView({block:'start'}); } });
+function setFold(open){ $('f').classList.toggle('open', open); $('fTog').setAttribute('aria-expanded', open); $('fTog').textContent = open ? '收起篩選條件 ▴' : '篩選條件 ▾'; }
+$('fTog').addEventListener('click', () => setFold(!$('f').classList.contains('open')));
+$('mSort').addEventListener('change', e => { const [k,d] = e.target.value.split(','); sortKey = k; sortDir = Number(d); render(true); });
+MOB.addEventListener('change', () => { if (DATA) render(true); });
 $('f').addEventListener('change', render);
 $('q').addEventListener('input', render);
 $('f').addEventListener('submit', e => { e.preventDefault(); render(); });
