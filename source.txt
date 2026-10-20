@@ -1,0 +1,2 @@
+FinMind TaiwanStockMonthRevenue(單位元)
+完成
