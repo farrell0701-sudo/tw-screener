@@ -1,0 +1,211 @@
+//@version=6
+// Accum-v3c 300 萬版（排除生技、通訊）— TradingView 指標
+// 單一股票圖上的訊號與出場模擬；8 格資金分配、同日排序需在選股端處理
+indicator("Accum-v3c 300萬版", shorttitle="Accum-v3c", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// ───────── 參數 ─────────
+G1 = "① 大盤濾網"
+useMkt     = input.bool(true, "啟用大盤濾網", group=G1)
+mktSym     = input.symbol("TWSE:TAIEX", "大盤代號", group=G1)
+mktLen     = input.int(60, "大盤 EMA 長度", minval=1, group=G1)
+mktLook    = input.int(20, "大盤斜率回看天數", minval=1, group=G1)
+
+G2 = "② 個股趨勢"
+trendLen   = input.int(200, "趨勢 EMA 長度", minval=1, group=G2)
+slopeLook  = input.int(10, "斜率回看天數", minval=1, group=G2)
+slopeMin   = input.float(0.1, "最低斜率（%/日）", step=0.01, group=G2)
+
+G3 = "③ 突破與量能"
+brkLen     = input.int(5, "收盤突破前 N 日最高收盤", minval=1, group=G3)
+volAvgLen  = input.int(20, "均量天數", minval=1, group=G3)
+volLook    = input.int(5, "前 N 日不可爆量", minval=1, group=G3)
+volMax     = input.float(3.0, "量能比上限（量 ÷ 均量）", step=0.1, group=G3)
+
+G4 = "④ 位置與漲停"
+hhLen      = input.int(250, "高點回看天數", minval=1, group=G4)
+posMax     = input.float(12.0, "距高點最多（%）", step=0.5, group=G4)
+useRescue  = input.bool(true, "啟用救回組 [回]", group=G4)
+rescueAtr  = input.float(2.5, "救回組 ATR% 上限", step=0.1, group=G4)
+limitUp    = input.float(9.5, "排除漲幅 ≥（%）", step=0.1, group=G4)
+
+G5 = "⑤ 流動性與產業"
+minTurn    = input.float(300, "20 日平均成交額 ≥（萬元）", step=50, group=G5)
+turnLen    = input.int(20, "成交額平均天數", minval=1, group=G5)
+volUnit    = input.string("股", "圖表成交量單位", options=["股", "張"], group=G5)
+exclBio    = input.bool(true, "自動排除生技（TradingView 產業 = Health Technology）", group=G5)
+exclManual = input.bool(false, "手動排除此股（例如通信網路業）", group=G5)
+
+G6 = "⑥ 評分（≥ 門檻才進場）"
+minScore   = input.int(3, "最低分數", minval=0, maxval=6, group=G6)
+atrLen     = input.int(14, "ATR 長度（Wilder）", minval=1, group=G6)
+sAtr       = input.float(3.3, "1. ATR% ≤", step=0.1, group=G6)
+sDist      = input.float(8.0, "2. 距高點 ≤（%）", step=0.5, group=G6)
+sRngLen    = input.int(20, "3. 區間天數", minval=1, group=G6)
+sRng       = input.float(16.49, "3. 區間 ÷ 收盤 ≤（%）", step=0.1, group=G6)
+sEmaLen    = input.int(60, "4. 參考 EMA 長度", minval=1, group=G6)
+sEma       = input.float(11.9, "4. 距 EMA ≤（%）", step=0.1, group=G6)
+sChg       = input.float(2.68, "5. 當日漲幅 ≤（%）", step=0.01, group=G6)
+sCap       = input.float(10, "6. 股本 ≥（億元）", step=1, group=G6)
+capManual  = input.float(0, "股本手動輸入（億元，0 = 自動）", step=1, group=G6)
+
+G7 = "⑦ 出場"
+atrMult    = input.float(4.0, "ATR 停損倍數", step=0.5, group=G7)
+distMin    = input.float(4.0, "停損距離下限（%）", step=0.5, group=G7)
+distMax    = input.float(20.0, "停損距離上限（%）", step=0.5, group=G7)
+useBE      = input.bool(true, "啟用保本停損", group=G7)
+beTrig     = input.float(6.0, "保本啟動：最高收盤漲幅 ≥（%）", step=0.5, group=G7)
+beLvl      = input.float(0.5, "保本出場：收盤 < 進場價 +（%）", step=0.1, group=G7)
+
+G8 = "⑧ 成本與顯示"
+slip       = input.float(0.1, "滑價每邊（%）", step=0.05, group=G8)
+fee        = input.float(0.0225, "手續費每邊（%）", step=0.0025, group=G8)
+tax        = input.float(0.405, "證交稅（%）", step=0.005, group=G8)
+showLbl    = input.bool(true, "顯示進出場標籤", group=G8)
+showStop   = input.bool(true, "顯示停損線", group=G8)
+showTbl    = input.bool(true, "顯示資訊表", group=G8)
+showStats  = input.bool(true, "資訊表顯示本圖歷史統計", group=G8)
+
+// ───────── 指標計算 ─────────
+// 大盤：只用已收盤的日線
+[mE, mEp] = request.security(mktSym, "D", [ta.ema(close, mktLen), ta.ema(close, mktLen)[mktLook]], lookahead=barmerge.lookahead_off)
+mktOK = not useMkt or (not na(mE) and not na(mEp) and mE / mEp - 1 > 0)
+
+eT     = ta.ema(close, trendLen)
+slope  = (eT / eT[slopeLook] - 1) * 100 / slopeLook
+trendOK = slope >= slopeMin
+
+brkOK  = close > ta.highest(close[1], brkLen)
+vr     = volume / ta.sma(volume, volAvgLen)
+vrPrev = ta.highest(vr[1], volLook)
+volOK  = vrPrev <= volMax
+
+hh     = ta.highest(high, hhLen)
+dist   = (close / hh - 1) * 100
+atrP   = ta.atr(atrLen) / close * 100
+chg    = (close / close[1] - 1) * 100
+posMain   = dist >= -posMax
+posRescue = useRescue and not posMain and atrP <= rescueAtr
+posOK  = posMain or posRescue
+luOK   = chg < limitUp
+
+shareVol = volUnit == "張" ? volume * 1000 : volume
+turn20   = ta.sma(close * shareVol, turnLen)
+liqOK    = turn20 >= minTurn * 1e4
+
+isBio  = exclBio and syminfo.sector == "Health Technology"
+indOK  = not isBio and not exclManual
+
+capAuto = syminfo.shares_outstanding_total * 10 / 1e8
+cap     = capManual > 0 ? capManual : capAuto
+rng     = (ta.highest(high, sRngLen) - ta.lowest(low, sRngLen)) / close * 100
+dEma    = (close / ta.ema(close, sEmaLen) - 1) * 100
+
+c1 = atrP <= sAtr
+c2 = dist >= -sDist
+c3 = rng <= sRng
+c4 = dEma <= sEma
+c5 = chg <= sChg
+c6 = not na(cap) and cap >= sCap
+score = (c1 ? 1 : 0) + (c2 ? 1 : 0) + (c3 ? 1 : 0) + (c4 ? 1 : 0) + (c5 ? 1 : 0) + (c6 ? 1 : 0)
+
+ready = bar_index >= hhLen - 1
+sig = ready and mktOK and trendOK and brkOK and volOK and posOK and luOK and liqOK and indOK and score >= minScore
+
+// ───────── 單檔持倉模擬 ─────────
+var bool  inPos   = false
+var float ec      = na      // 訊號 K 收盤（保本計算用，不含滑價）
+var float ep      = na      // 含滑價、手續費的成本
+var float maxC    = na
+var float stopD   = na
+var int   eBar    = na
+var int   nTr     = 0
+var int   nWin    = 0
+var float sumR    = 0.0
+var float eqty    = 1.0
+var float peak    = 1.0
+var float mdd     = 0.0
+
+exitNow = false
+exitWhy = ""
+if inPos and bar_index > eBar
+    maxC := math.max(maxC, close)
+    if close < maxC * (1 - stopD)
+        exitNow := true
+        exitWhy := "ATR"
+    else if useBE and maxC >= ec * (1 + beTrig / 100) and close < ec * (1 + beLvl / 100)
+        exitNow := true
+        exitWhy := "保本"
+
+if exitNow
+    xp  = close * (1 - slip / 100) * (1 - fee / 100 - tax / 100)
+    ret = xp / ep - 1
+    nTr  += 1
+    nWin += ret > 0 ? 1 : 0
+    sumR += ret
+    eqty *= 1 + ret
+    peak := math.max(peak, eqty)
+    mdd  := math.min(mdd, eqty / peak - 1)
+    inPos := false
+    if showLbl
+        label.new(bar_index, high, "賣 " + exitWhy + "\n" + (ret >= 0 ? "+" : "") + str.tostring(ret * 100, "#.0") + "%",
+                  style=label.style_label_down, color=ret >= 0 ? color.new(color.red, 15) : color.new(color.green, 15),
+                  textcolor=color.white, size=size.small)
+
+newEntry = sig and not inPos
+if newEntry
+    inPos := true
+    ec    := close
+    ep    := close * (1 + slip / 100) * (1 + fee / 100)
+    maxC  := close
+    stopD := math.min(math.max(atrP * atrMult, distMin), distMax) / 100
+    eBar  := bar_index
+    if showLbl
+        label.new(bar_index, low, "買" + (posRescue ? "[回]" : "") + " " + str.tostring(score) + "分\n停損 " + str.tostring(stopD * 100, "#.0") + "%",
+                  style=label.style_label_up, color=color.new(color.blue, 10), textcolor=color.white, size=size.small)
+
+// 訊號已在持倉中（不加碼）時的小標記
+plotshape(sig and not newEntry, "持倉中重複訊號", shape.circle, location.belowbar, color.new(color.blue, 60), size=size.tiny)
+
+stopLine = inPos ? maxC * (1 - stopD) : na
+beArmed  = inPos and useBE and maxC >= ec * (1 + beTrig / 100)
+beLine   = beArmed ? ec * (1 + beLvl / 100) : na
+plot(showStop ? stopLine : na, "ATR 移動停損", color.new(color.orange, 0), 2, plot.style_linebr)
+plot(showStop ? beLine : na, "保本線", color.new(color.purple, 0), 1, plot.style_linebr)
+plot(eT, "趨勢 EMA", color.new(color.gray, 40), 1)
+
+// ───────── 資訊表 ─────────
+ok(b) => b ? "✔" : "✘"
+okc(b) => b ? color.new(color.red, 0) : color.new(color.green, 0)
+var table tb = table.new(position.top_right, 2, 20, bgcolor=color.new(color.black, 20), border_width=1, frame_color=color.gray)
+row(r, k, v, c) =>
+    table.cell(tb, 0, r, k, text_color=color.white, text_size=size.small, text_halign=text.align_left)
+    table.cell(tb, 1, r, v, text_color=c, text_size=size.small, text_halign=text.align_right)
+
+if showTbl and barstate.islast
+    w = color.white
+    row(0,  "Accum-v3c", sig ? "今日訊號 ✔" : "無訊號", sig ? color.yellow : w)
+    row(1,  "大盤 EMA" + str.tostring(mktLen) + " 上升", ok(mktOK), okc(mktOK))
+    row(2,  "趨勢斜率 %/日", str.tostring(slope, "#.000") + " " + ok(trendOK), okc(trendOK))
+    row(3,  "突破 " + str.tostring(brkLen) + " 日收盤", ok(brkOK), okc(brkOK))
+    row(4,  "前 " + str.tostring(volLook) + " 日量能比", str.tostring(vrPrev, "#.00") + " " + ok(volOK), okc(volOK))
+    row(5,  "距 " + str.tostring(hhLen) + " 日高", str.tostring(dist, "#.0") + "% " + (posMain ? "✔" : posRescue ? "[回]" : "✘"), okc(posOK))
+    row(6,  "當日漲幅", str.tostring(chg, "#.00") + "% " + ok(luOK), okc(luOK))
+    row(7,  "20 日均額（萬）", str.tostring(turn20 / 1e4, "#,###") + " " + ok(liqOK), okc(liqOK))
+    row(8,  "產業 / 手動排除", (isBio ? "生技 " : "") + ok(indOK), okc(indOK))
+    row(9,  "評分", str.tostring(score) + " / 6 " + ok(score >= minScore), okc(score >= minScore))
+    row(10, "  ATR% " + str.tostring(atrP, "#.00"), ok(c1), okc(c1))
+    row(11, "  距高 ≤ " + str.tostring(sDist) + "%", ok(c2), okc(c2))
+    row(12, "  區間 " + str.tostring(rng, "#.0") + "%", ok(c3), okc(c3))
+    row(13, "  距 EMA" + str.tostring(sEmaLen) + " " + str.tostring(dEma, "#.0") + "%", ok(c4), okc(c4))
+    row(14, "  漲幅 ≤ " + str.tostring(sChg) + "%", ok(c5), okc(c5))
+    row(15, "  股本（億）" + (na(cap) ? "無資料" : str.tostring(cap, "#.0")), ok(c6), okc(c6))
+    row(16, "持倉", inPos ? "停損 " + str.tostring(stopLine, "#.##") + (beArmed ? "｜保本 " + str.tostring(beLine, "#.##") : "") : "空手", inPos ? color.yellow : w)
+    if showStats
+        row(17, "本圖交易 / 勝率", str.tostring(nTr) + " / " + (nTr > 0 ? str.tostring(nWin * 100.0 / nTr, "#") + "%" : "-"), w)
+        row(18, "平均報酬（含成本）", nTr > 0 ? str.tostring(sumR / nTr * 100, "#.0") + "%" : "-", w)
+        row(19, "連續複利 / 最大回落", str.tostring((eqty - 1) * 100, "#") + "% / " + str.tostring(mdd * 100, "#.0") + "%", w)
+
+// ───────── 警示 ─────────
+alertcondition(newEntry, "Accum-v3c 進場", "{{ticker}} Accum-v3c 進場訊號，收盤 {{close}}")
+alertcondition(exitNow and exitWhy == "ATR", "Accum-v3c ATR 停損", "{{ticker}} ATR 移動停損出場，收盤 {{close}}")
+alertcondition(exitNow and exitWhy == "保本", "Accum-v3c 保本出場", "{{ticker}} 保本停損出場，收盤 {{close}}")
