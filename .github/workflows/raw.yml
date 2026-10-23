@@ -1,0 +1,45 @@
+name: 下載真正未還原股價(回測用)
+
+on:
+  workflow_dispatch: {}      # 沒抓完就再按一次 Run workflow,會自動接續
+  push:
+    branches: [claude/raw-prices]
+    paths: [scripts/fetch_raw.py, .github/workflows/raw.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chips               # 與其他 FinMind 下載共用額度,排隊執行
+  cancel-in-progress: false
+
+jobs:
+  raw:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與下市股清單
+        run: |
+          git clone -q --depth 1 -b raw-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_raw || mkdir -p out_raw
+          rm -rf out_raw/.git
+          git clone -q --depth 1 -b delist-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist_src || mkdir -p delist_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+        run: python scripts/fetch_raw.py
+      - name: 存到分支 raw-data
+        if: always()
+        run: |
+          cd out_raw
+          git init -q -b raw-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "未還原股價 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" raw-data
