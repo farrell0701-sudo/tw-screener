@@ -9,7 +9,9 @@
   - TaiwanStockDividendResult                 除權息結果(前收盤、參考價)
   - TaiwanStockCapitalReductionReferencePrice 減資恢復買賣參考價
   - TaiwanStockSplitPrice                     面額變更參考價
-  事件資料先嘗試一次抓全市場;不支援時只替 delist-data 的下市股逐檔補抓(現存股的還原比例用 Yahoo AdjClose)。
+  事件資料先嘗試一次抓全市場;不支援時逐檔補抓。
+  EV_ALL=1(預設):現存股＋下市股都抓事件,用來自己算還原價(Yahoo AdjClose 有大量錯誤:
+  1,148 檔出現超過漲跌幅的還原價跳動)。約 6,000 次查詢、10 小時,沒抓完會自動再觸發一次接續。
 
 每小時約 580 次查詢。單次最多跑 5 小時 20 分就存檔;再執行一次會自動接續。
 與其他 FinMind 下載共用額度,請不要同時跑。
@@ -41,6 +43,8 @@ GAP = 6.2
 BUDGET = 5 * 3600 + 20 * 60
 T0 = time.time()
 _last = [0.0]
+EV_ALL = os.environ.get("EV_ALL", "1") == "1"
+STATUS = Path(os.environ.get("STATUS_FILE", "/tmp/raw_status.txt"))
 EVENTS = ["TaiwanStockDividendResult", "TaiwanStockCapitalReductionReferencePrice", "TaiwanStockSplitPrice"]
 COLS = ["date", "o", "h", "l", "c", "v", "tv"]
 
@@ -123,7 +127,8 @@ def main():
 
     # 2) 逐檔:現存股抓價格;下市股抓事件(若整批不支援)
     todo = [("px", c) for c in codes if c not in done]
-    todo += [("ev", c) for c in delisted if f"ev_{c}" not in done and not all(bulk_ok.values())]
+    ev_codes = (codes + delisted) if EV_ALL else delisted
+    todo += [("ev", c) for c in ev_codes if f"ev_{c}" not in done and not all(bulk_ok.values())]
     print(f"已完成 {len(done)} 個檔案,這次待抓 {len(todo)} 項", flush=True)
     got = 0
     for i, (kind, code) in enumerate(todo, 1):
@@ -156,12 +161,13 @@ def main():
                 z.writestr(f"{k}.csv", s)
     have = done | set(store)
     left_px = sum(c not in have for c in codes)
-    left_ev = 0 if all(bulk_ok.values()) else sum(f"ev_{c}" not in have for c in delisted)
+    left_ev = 0 if all(bulk_ok.values()) else sum(f"ev_{c}" not in have for c in ev_codes)
     (OUT / "README.md").write_text(
         f"回測用真正未還原日線(FinMind)\n\n- 期間:{START} ~ {END}\n- 現存股價格尚缺:{left_px} 檔\n"
-        f"- 下市股事件尚缺:{left_ev} 檔\n- 事件整批查詢:{bulk_ok}\n"
+        f"- 事件尚缺:{left_ev} 檔(範圍:{'現存＋下市' if EV_ALL else '下市'})\n- 事件整批查詢:{bulk_ok}\n"
         f"- 最後更新(UTC):{pd.Timestamp.utcnow():%Y-%m-%d %H:%M}\n", encoding="utf-8")
-    print(f"本次存 {got} 項;現存股價格尚缺 {left_px} 檔、下市股事件尚缺 {left_ev} 檔"
+    STATUS.write_text("MORE" if (left_px or left_ev) else "DONE")
+    print(f"本次存 {got} 項;現存股價格尚缺 {left_px} 檔、事件尚缺 {left_ev} 檔"
           + (",請再執行一次。" if left_px or left_ev else ",全部完成!"), flush=True)
 
 
