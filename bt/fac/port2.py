@@ -26,7 +26,8 @@ Uv, Sv = U.values, SC.values
 BUY = ((O.shift(-1) / C - 1 < 0.095) & O.shift(-1).notna()).values
 
 
-def run(off=0, filt=False, kb=None, kr=None, tp=None, start=d0, end=None):
+def run(off=0, filt=False, kb=None, kr=None, tp=None, start=d0, end=None, bull_arr=None):
+    BL = BULL if bull_arr is None else bull_arr
     end = end or len(dates) - 1
     reb = set(range(start + off, end - 1, REB))
     cash = 1.0; pos = {}            # j -> [股數, 進場價, 最高收盤]
@@ -50,7 +51,7 @@ def run(off=0, filt=False, kb=None, kr=None, tp=None, start=d0, end=None):
         sell_next, buy_next = set(), []
         # 2) 收盤：記錄淨值、更新最高價、檢查停損停利
         eq[t] = cash + sum(p[0] * Cfv[t, j] for j, p in pos.items())
-        bull = BULL[t]
+        bull = BL[t]
         for j, p in pos.items():
             c = Cv[t, j]
             if np.isnan(c): continue
