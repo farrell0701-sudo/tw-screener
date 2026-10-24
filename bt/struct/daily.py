@@ -11,7 +11,18 @@ OVH_A, OVH_B = 21, 250        # 上方壓力的回看範圍（根）
 BAND = 1.10                   # 近 5 日高點往上 10% 的價格帶
 
 
+def fix_jumps(a, th=0.11):
+    """與 fac/panel.py 相同：上市 5 天後 >11% 的單日變動視為減資／資料錯誤，報酬設 0 並向前等比例調整"""
+    r = a.C / a.C.shift(1) - 1
+    bad = (r.abs() > th) & (np.arange(len(a)) > 5)
+    adj = (1 + r.where(bad, 0)).iloc[::-1].cumprod().iloc[::-1].shift(-1).fillna(1.0)
+    a = a.copy()
+    for k in ('O', 'H', 'L', 'C'): a[k] = a[k] * adj
+    return a
+
+
 def stock_daily(a):
+    a = fix_jumps(a)
     H, L, C, V = (a[k].values.astype(float) for k in ('H', 'L', 'C', 'V'))
     n = len(C)
     near, far = overlap_lines(H, L)
