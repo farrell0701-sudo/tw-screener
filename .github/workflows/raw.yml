@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write            # 沒抓完時自動再觸發下一輪
 
 concurrency:
   group: chips               # 與其他 FinMind 下載共用額度,排隊執行
@@ -32,6 +33,8 @@ jobs:
       - name: 下載
         env:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          EV_ALL: "1"
+          STATUS_FILE: ${{ github.workspace }}/raw_status.txt
         run: python scripts/fetch_raw.py
       - name: 存到分支 raw-data
         if: always()
@@ -43,3 +46,14 @@ jobs:
           git add .
           git commit -q -m "未還原股價 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" raw-data
+      - name: 沒抓完就自動再跑一輪
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$(cat raw_status.txt 2>/dev/null)" = "MORE" ]; then
+            gh workflow run raw.yml --ref "${{ github.ref_name }}" -R "${{ github.repository }}"
+            echo "已觸發下一輪"
+          else
+            echo "全部完成"
+          fi
