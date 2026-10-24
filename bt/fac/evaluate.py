@@ -93,6 +93,9 @@ def evaluate(name, F, sign, E, P, ctrls=None):
         qm = [ex.where((q > i / 5) & (q <= (i + 1) / 5)).mean(1) for i in range(5)]
         for i in range(5): out[f'Q{i + 1}_{h}'] = qm[i].mean() * 100
         out[f'Q5-Q1_{h}'] = (qm[4] - qm[0]).mean() * 100
+        # 頂端：每日前 20／50 檔的超額報酬。排序選股只用到最頂端，IC 好但頂端飽和或反轉的因子在組合裡沒用
+        rk = F.where(m).rank(axis=1, ascending=False)
+        for n_ in (20, 50): out[f'Top{n_}_{h}'] = ex.where(rk <= n_).mean(1).mean() * 100
         if h == 20:
             mo = qm[4].groupby(qm[4].index.to_period('M')).mean().dropna()
             pos = mo.clip(lower=0).sort_values(ascending=False)
