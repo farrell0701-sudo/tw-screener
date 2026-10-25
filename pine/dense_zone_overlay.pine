@@ -1,0 +1,53 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────
+// 密集重疊區＋出場線 ── 主圖疊加
+// 密集區：最近 W 根 K 棒中，至少一半 K 棒都覆蓋的價格區間
+//        ＝ [W 根低點的中位數, W 根高點的中位數]
+// 進場參考：收盤第一次越過「昨天為止」的密集區上緣（研究結果：比越過箱頂好很多，箱頂突破明顯追高）
+// 出場線：持有期最高收盤 − k×ATR；k 依大盤多空切換（多頭 4、空頭 3；大盤 = 加權指數 EMA60 的 20 日斜率）
+// ─────────────────────────────────────────────────────────────
+indicator("密集區突破＋ATR 出場", shorttitle="密集區", overlay=true, max_bars_back=500)
+
+grpD = "密集區"
+W        = input.int(20, "密集區範圍（根）", minval=5, maxval=60, group=grpD)
+useTight = input.bool(false, "只在整理時出訊號", group=grpD)
+tightMax = input.float(6.0, "整理：W 根總區間 ≤ ATR ×", step=0.5, group=grpD)
+showBox  = input.bool(true, "顯示箱頂（W 根最高價）", group=grpD)
+
+grpX = "出場線"
+showStop = input.bool(true, "顯示 ATR 出場線", group=grpX)
+kBull    = input.float(4.0, "多頭 ATR 倍數", step=0.5, group=grpX)
+kBear    = input.float(3.0, "空頭 ATR 倍數", step=0.5, group=grpX)
+lookHi   = input.int(22, "最高收盤回看（根）", minval=5, group=grpX)
+idxSym   = input.symbol("TWSE:TAIEX", "大盤代號", group=grpX)
+
+grpV = "警示"
+showVcp = input.bool(true, "標示波動突然放大", group=grpV)
+vcpMax  = input.float(1.5, "ATR20 ÷ ATR120 >", step=0.1, group=grpV)
+
+atr14 = ta.rma(ta.tr(true), 14)
+medH  = ta.percentile_nearest_rank(high, W, 50)[1]
+medL  = ta.percentile_nearest_rank(low,  W, 50)[1]
+boxTop = ta.highest(high, W)[1]
+tightOK = not useTight or (ta.highest(high, W)[1] - ta.lowest(low, W)[1]) / atr14[1] <= tightMax
+
+pH = plot(medH, "密集區上緣", color=color.new(color.orange, 0), linewidth=1)
+pL = plot(medL, "密集區下緣", color=color.new(color.orange, 50), linewidth=1)
+fill(pH, pL, color=color.new(color.orange, 85), title="密集區")
+plot(showBox ? boxTop : na, "箱頂", color=color.new(color.gray, 40), style=plot.style_circles, linewidth=1)
+
+breakUp = close > medH and close[1] <= medH[1] and tightOK
+plotshape(breakUp, "越過密集區上緣", shape.triangleup, location.belowbar, color.new(color.lime, 0), size=size.tiny)
+alertcondition(breakUp, "越過密集區上緣", "收盤越過密集區上緣")
+
+// 大盤多空 → 出場倍數
+tx  = request.security(idxSym, "D", close)
+e60 = ta.ema(tx, 60)
+bull = e60 > e60[20]
+k = bull ? kBull : kBear
+stopLine = ta.highest(close, lookHi) - k * atr14
+plot(showStop ? stopLine : na, "ATR 出場線", color=bull ? color.new(color.aqua, 0) : color.new(color.red, 0), style=plot.style_stepline, linewidth=1)
+bgcolor(bull ? na : color.new(color.red, 94), title="大盤空頭")
+
+vcp = ta.sma(atr14, 20) / ta.sma(atr14, 120)
+plotshape(showVcp and vcp > vcpMax and vcp[1] <= vcpMax, "波動放大", shape.xcross, location.abovebar, color.new(color.red, 0), size=size.tiny)

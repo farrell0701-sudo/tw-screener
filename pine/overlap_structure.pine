@@ -1,0 +1,99 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────
+// K棒重疊結構（Overlap）── 副圖
+// near：今天的 [低,高] 和前 1～20 根 K 棒有交集的比例（近期收斂度）
+// far ：今天的 [低,高] 和前 21～120 根 K 棒有交集的比例（還在不在舊區間裡）
+// 兩條線都取 5 日平均。
+// 結構轉變（C→B→A）：近期收斂、已脫離舊區間、近期收斂度上升、
+//                    低點守在舊高附近、15～25 天前還在舊區間裡
+// 右上表格：T_ld（趨勢強度，研究中最穩定的因子）、波動擴張、上方套牢量
+// ─────────────────────────────────────────────────────────────
+indicator("K棒重疊結構 Overlap", shorttitle="Overlap", overlay=false, max_bars_back=500)
+
+grpO = "重疊線"
+nearN   = input.int(20,  "近期範圍（根）", minval=5,  maxval=60,  group=grpO)
+farN    = input.int(120, "遠期範圍（根）", minval=60, maxval=400, group=grpO)
+smoothN = input.int(5,   "平滑（日）",     minval=1,  maxval=20,  group=grpO)
+
+grpT = "結構轉變條件"
+thNear  = input.float(0.35, "近期收斂度 ≥",      step=0.05, group=grpT)
+thFar   = input.float(0.10, "遠期重疊度 ≤",      step=0.05, group=grpT)
+thBase  = input.float(0.30, "15～25 天前遠期重疊度 ≥", step=0.05, group=grpT)
+topPct  = input.float(98.0, "5 日低點 ≥ 舊高 ×（%）", step=0.5, group=grpT)
+
+grpF = "附加因子（表格）"
+showTbl = input.bool(true, "顯示表格", group=grpF)
+ovhLook = input.int(250, "上方套牢量回看（根）", minval=60, maxval=480, group=grpF)
+ovhBand = input.float(3.0, "套牢價格帶寬（ATR 倍數）", step=0.5, group=grpF)
+
+// ── 重疊線 ──
+float nearCnt = 0.0
+for k = 1 to nearN
+    if math.min(high, high[k]) > math.max(low, low[k])
+        nearCnt += 1
+float farCnt = 0.0
+for k = nearN + 1 to farN
+    if math.min(high, high[k]) > math.max(low, low[k])
+        farCnt += 1
+nearR = nearCnt / nearN
+farR  = farCnt / (farN - nearN)
+near5 = ta.sma(nearR, smoothN)
+far5  = ta.sma(farR,  smoothN)
+
+// ── 結構轉變 ──
+oldTop     = ta.percentile_linear_interpolation(high[21], 100, 90)   // 舊區間上緣：前 21～120 根高點的 90 分位
+baseBefore = ta.highest(far5[15], 11)                                  // 15～25 天前的遠期重疊度
+trans = near5 >= thNear and far5 <= thFar and near5 > near5[3] and ta.lowest(low, 5) >= oldTop * topPct / 100 and baseBefore >= thBase and bar_index > farN + 30
+var int lastTrans = -1000
+newTrans = trans and bar_index - lastTrans >= 20
+if newTrans
+    lastTrans := bar_index
+
+plot(near5, "近期收斂度 near", color=color.new(color.orange, 0), linewidth=2)
+plot(far5,  "遠期重疊度 far",  color=color.new(color.teal, 0),   linewidth=2)
+hline(thNear, "近期門檻", color=color.new(color.orange, 60), linestyle=hline.style_dashed)
+hline(thFar,  "遠期門檻", color=color.new(color.teal, 60),   linestyle=hline.style_dashed)
+hline(thBase, "舊區間門檻", color=color.new(color.gray, 60), linestyle=hline.style_dotted)
+plotshape(newTrans, "結構轉變", shape.triangleup, location.bottom, color.new(color.fuchsia, 0), size=size.small, text="A")
+bgcolor(far5 >= thBase ? color.new(color.gray, 92) : na, title="仍在舊區間")
+alertcondition(newTrans, "結構轉變", "出現 C→B→A 結構轉變（A）")
+
+// ── 附加因子 ──
+atr14 = ta.rma(ta.tr(true), 14)
+e12   = ta.ema(close, 12)
+e200  = ta.ema(close, 200)
+tld   = (e12 - e200) / atr14                         // 趨勢強度：EMA12 與 EMA200 距離幾個 ATR
+vcp   = ta.sma(atr14, 20) / ta.sma(atr14, 120)       // 波動擴張：>1.5 代表最近波動突然放大
+
+// 上方套牢量：前 21～N 根 K 棒中，落在 [近 5 日高, 近 5 日高 + 帶寬×ATR] 的成交量占比（只在最後一根計算）
+hi5 = ta.highest(high, 5)
+var float ovh = na
+if barstate.islast and showTbl
+    up = hi5 + ovhBand * atr14
+    float hit = 0.0
+    float tot = 0.0
+    lookN = math.min(ovhLook, bar_index - 1)
+    for k = 21 to lookN
+        h = high[k]
+        l = low[k]
+        v = volume[k]
+        rng = math.max(h - l, syminfo.mintick)
+        f = math.max(0.0, math.min(h, up) - math.max(l, hi5)) / rng
+        hit += v * f
+        tot += v
+    ovh := tot > 0 ? hit / tot : na
+
+if showTbl and barstate.islast
+    var table t = table.new(position.top_right, 2, 6, bgcolor=color.new(color.black, 80), border_width=1)
+    table.cell(t, 0, 0, "因子", text_color=color.white)
+    table.cell(t, 1, 0, "數值", text_color=color.white)
+    table.cell(t, 0, 1, "T_ld（趨勢）", text_color=color.white)
+    table.cell(t, 1, 1, str.tostring(tld, "#.##"), text_color=tld > 5 ? color.lime : tld > 0 ? color.yellow : color.red)
+    table.cell(t, 0, 2, "波動擴張", text_color=color.white)
+    table.cell(t, 1, 2, str.tostring(vcp, "#.##"), text_color=vcp > 1.5 ? color.red : color.white)
+    table.cell(t, 0, 3, "上方套牢量", text_color=color.white)
+    table.cell(t, 1, 3, na(ovh) ? "—" : str.tostring(ovh * 100, "#.#") + "%", text_color=ovh < 0.05 ? color.lime : color.white)
+    table.cell(t, 0, 4, "near / far", text_color=color.white)
+    table.cell(t, 1, 4, str.tostring(near5, "#.##") + " / " + str.tostring(far5, "#.##"), text_color=color.white)
+    table.cell(t, 0, 5, "距上次 A（根）", text_color=color.white)
+    table.cell(t, 1, 5, lastTrans < 0 ? "—" : str.tostring(bar_index - lastTrans), text_color=color.white)
