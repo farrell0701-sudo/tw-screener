@@ -17,6 +17,7 @@ def prepare(P):
     amt20 = AMT.rolling(20, min_periods=15).mean()
     liq = amt20.ge(amt20.quantile(0.20, axis=1), axis=0)
     univ = C.notna() & (age >= 250) & liq
+    if 'eligible' in P: univ &= P['eligible'].reindex_like(univ).fillna(False)   # 乾淨版：排除興櫃與瑕疵後未滿一年
     lr = np.log(C / C.shift(1))
     sig60 = lr.rolling(60, min_periods=40).std()
     Cf = C.ffill()

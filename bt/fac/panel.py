@@ -45,6 +45,8 @@ def fix_jumps(P, th=0.11):
 
 
 def load_panel():
+    if os.environ.get('CLEAN', '1') == '1' and os.path.exists('/home/claude/bt/fac/panel_clean.pkl'):   # 預設用乾淨版：FinMind 未還原價＋事件自算還原價（build_clean.py）
+        return pd.read_pickle('/home/claude/bt/fac/panel_clean.pkl')
     if os.path.exists(OUT):
         return clean(pd.read_pickle(OUT))
     P = build(); pd.to_pickle(P, OUT); return clean(P)
