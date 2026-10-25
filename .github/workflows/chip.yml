@@ -1,0 +1,144 @@
+name: 下載籌碼資料(回測用)
+
+on:
+  workflow_dispatch: {}      # 沒抓完就再按一次 Run workflow,會自動接續
+  push:
+    branches: [claude/raw-prices]
+    paths: [scripts/fetch_chip.py, .github/workflows/chip.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chips               # 與其他 FinMind 下載共用額度,排隊執行
+  cancel-in-progress: false
+
+# 依序 4 個工作,每個最多 5 小時 20 分;後一個從 chip-data 分支接續前一個
+jobs:
+  chip1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與下市股清單
+        run: |
+          git clone -q --depth 1 -b chip-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_chip || mkdir -p out_chip
+          rm -rf out_chip/.git
+          git clone -q --depth 1 -b delist-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist_src || mkdir -p delist_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          STATUS_FILE: ${{ github.workspace }}/chip_status.txt
+        run: python scripts/fetch_chip.py
+      - name: 存到分支 chip-data
+        if: always()
+        run: |
+          cd out_chip
+          git init -q -b chip-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "籌碼 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" chip-data
+  chip2:
+    needs: chip1
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與下市股清單
+        run: |
+          git clone -q --depth 1 -b chip-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_chip || mkdir -p out_chip
+          rm -rf out_chip/.git
+          git clone -q --depth 1 -b delist-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist_src || mkdir -p delist_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          STATUS_FILE: ${{ github.workspace }}/chip_status.txt
+        run: python scripts/fetch_chip.py
+      - name: 存到分支 chip-data
+        if: always()
+        run: |
+          cd out_chip
+          git init -q -b chip-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "籌碼 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" chip-data
+  chip3:
+    needs: chip2
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與下市股清單
+        run: |
+          git clone -q --depth 1 -b chip-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_chip || mkdir -p out_chip
+          rm -rf out_chip/.git
+          git clone -q --depth 1 -b delist-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist_src || mkdir -p delist_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          STATUS_FILE: ${{ github.workspace }}/chip_status.txt
+        run: python scripts/fetch_chip.py
+      - name: 存到分支 chip-data
+        if: always()
+        run: |
+          cd out_chip
+          git init -q -b chip-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "籌碼 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" chip-data
+
+  chip4:
+    needs: chip3
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與下市股清單
+        run: |
+          git clone -q --depth 1 -b chip-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_chip || mkdir -p out_chip
+          rm -rf out_chip/.git
+          git clone -q --depth 1 -b delist-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist_src || mkdir -p delist_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          STATUS_FILE: ${{ github.workspace }}/chip_status.txt
+        run: python scripts/fetch_chip.py
+      - name: 存到分支 chip-data
+        if: always()
+        run: |
+          cd out_chip
+          git init -q -b chip-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "籌碼 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" chip-data
