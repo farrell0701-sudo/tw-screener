@@ -6,7 +6,13 @@
   本益比／淨值比／殖利率：證交所每日公布，當天收盤後即可用
 輸出 /home/claude/bt/fac/fund.pkl：dict(因子名 → DataFrame)"""
 import os, glob
+_rc = pd.read_csv if False else None
 import numpy as np, pandas as pd
+_read = pd.read_csv
+def _safe(f, **k):
+    try: return _read(f, **k)
+    except pd.errors.EmptyDataError: return pd.DataFrame()
+    finally: pass
 
 FD = '/home/claude/fund'
 OUT = '/home/claude/bt/fac/fund.pkl'
@@ -35,14 +41,15 @@ def build(P):
     for c in cols:
         f = f'{FD}/per_{c}.csv'
         if os.path.exists(f):
-            p = pd.read_csv(f, parse_dates=['date']).drop_duplicates('date').set_index('date')
-            if len(p):
+            p = _safe(f)
+            if len(p) and 'date' in p:
+                p['date'] = pd.to_datetime(p['date']); p = p.drop_duplicates('date').set_index('date')
                 for k, col in (('PER', 'PER'), ('PBR', 'PBR'), ('DY', 'dividend_yield')):
                     out[k][c] = p[col].replace(0, np.nan).reindex(idx) if k != 'DY' else p[col].reindex(idx)
         f = f'{FD}/is_{c}.csv'
         if os.path.exists(f):
-            i = pd.read_csv(f)
-            if len(i):
+            i = _safe(f)
+            if len(i) and 'type' in i:
                 piv = i.pivot_table(index='date', columns='type', values='value', aggfunc='last')
                 piv.index = pd.to_datetime(piv.index); piv = piv.sort_index()
                 ni = piv.get('EquityAttributableToOwnersOfParent')
@@ -59,8 +66,8 @@ def build(P):
                     om.index = [avail_date(d) for d in om.index]; out['OPM_TTM'][c] = to_daily(om.dropna(), idx)
         f = f'{FD}/bs_{c}.csv'
         if os.path.exists(f):
-            b = pd.read_csv(f)
-            if len(b):
+            b = _safe(f)
+            if len(b) and 'type' in b:
                 piv = b.pivot_table(index='date', columns='type', values='value', aggfunc='last')
                 piv.index = pd.to_datetime(piv.index); piv = piv.sort_index()
                 for k, col in (('EQ', 'EquityAttributableToOwnersOfParent'), ('SH', 'OrdinaryShare')):
@@ -71,8 +78,8 @@ def build(P):
         rv = None
         f = f'{FD}/rev_{c}.csv'
         if os.path.exists(f):
-            r = pd.read_csv(f)
-            if len(r): rv = pd.Series(r.revenue.values, index=pd.to_datetime(r.date) + pd.Timedelta(days=10))
+            r = _safe(f)
+            if len(r) and 'revenue' in r: rv = pd.Series(r.revenue.values, index=pd.to_datetime(r.date) + pd.Timedelta(days=10))
         elif rev_cur is not None:
             r = rev_cur[rev_cur.code == c]
             if len(r):
