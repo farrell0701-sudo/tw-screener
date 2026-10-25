@@ -1,0 +1,111 @@
+name: 下載基本面資料(回測用)
+
+on:
+  workflow_dispatch: {}      # 沒抓完就再按一次 Run workflow,會自動接續
+  push:
+    branches: [claude/raw-prices]
+    paths: [scripts/fetch_fund.py, .github/workflows/fund.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chips               # 與其他 FinMind 下載共用額度,排隊執行
+  cancel-in-progress: false
+
+# 依序 3 個工作,每個最多 5 小時 20 分;後一個從 fund-data 分支接續前一個
+jobs:
+  fund1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與下市股清單
+        run: |
+          git clone -q --depth 1 -b fund-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_fund || mkdir -p out_fund
+          rm -rf out_fund/.git
+          git clone -q --depth 1 -b delist-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist_src || mkdir -p delist_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          STATUS_FILE: ${{ github.workspace }}/fund_status.txt
+        run: python scripts/fetch_fund.py
+      - name: 存到分支 fund-data
+        if: always()
+        run: |
+          cd out_fund
+          git init -q -b fund-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "基本面 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" fund-data
+  fund2:
+    needs: fund1
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與下市股清單
+        run: |
+          git clone -q --depth 1 -b fund-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_fund || mkdir -p out_fund
+          rm -rf out_fund/.git
+          git clone -q --depth 1 -b delist-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist_src || mkdir -p delist_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          STATUS_FILE: ${{ github.workspace }}/fund_status.txt
+        run: python scripts/fetch_fund.py
+      - name: 存到分支 fund-data
+        if: always()
+        run: |
+          cd out_fund
+          git init -q -b fund-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "基本面 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" fund-data
+  fund3:
+    needs: fund2
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與下市股清單
+        run: |
+          git clone -q --depth 1 -b fund-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_fund || mkdir -p out_fund
+          rm -rf out_fund/.git
+          git clone -q --depth 1 -b delist-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" delist_src || mkdir -p delist_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          STATUS_FILE: ${{ github.workspace }}/fund_status.txt
+        run: python scripts/fetch_fund.py
+      - name: 存到分支 fund-data
+        if: always()
+        run: |
+          cd out_fund
+          git init -q -b fund-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "基本面 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" fund-data
