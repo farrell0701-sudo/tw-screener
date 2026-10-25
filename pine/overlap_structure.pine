@@ -15,6 +15,11 @@ nearN   = input.int(20,  "近期範圍（根）", minval=5,  maxval=60,  group=g
 farN    = input.int(120, "遠期範圍（根）", minval=60, maxval=400, group=grpO)
 smoothN = input.int(5,   "平滑（日）",     minval=1,  maxval=20,  group=grpO)
 
+mode   = input.string("柱狀圖＋雙線", "顯示方式", options=["柱狀圖＋雙線", "只有柱狀圖", "只有雙線"], group=grpO)
+histMode = input.string("差值", "柱狀圖內容", options=["差值", "差值−訊號線（類 MACD 柱）"], group=grpO,
+     tooltip="差值 = near − far。類 MACD 柱 = 差值減去差值的 EMA，看差值在加速還是減速")
+sigN   = input.int(9, "訊號線 EMA（根）", minval=2, group=grpO)
+
 grpT = "結構轉變條件"
 thNear  = input.float(0.35, "近期收斂度 ≥",      step=0.05, group=grpT)
 thFar   = input.float(0.10, "遠期重疊度 ≤",      step=0.05, group=grpT)
@@ -49,8 +54,20 @@ newTrans = trans and bar_index - lastTrans >= 20
 if newTrans
     lastTrans := bar_index
 
-plot(near5, "近期收斂度 near", color=color.new(color.orange, 0), linewidth=2)
-plot(far5,  "遠期重疊度 far",  color=color.new(color.teal, 0),   linewidth=2)
+// ── 差值柱狀圖（near − far）──
+// 正值：近期收斂、且已脫離舊區間（新結構）；負值：仍和舊區間大量重疊（還在舊箱子裡）
+ofDiff = near5 - far5
+ofSig  = ta.ema(ofDiff, sigN)
+histV  = histMode == "差值" ? ofDiff : ofDiff - ofSig
+histC  = histV >= 0 ? (histV >= histV[1] ? color.new(color.lime, 10) : color.new(color.lime, 60)) : (histV <= histV[1] ? color.new(color.red, 10) : color.new(color.red, 60))
+showHist  = mode != "只有雙線"
+showLines = mode != "只有柱狀圖"
+plot(showHist ? histV : na, "OF 柱狀圖", style=plot.style_columns, color=histC)
+plot(showHist and histMode != "差值" ? ofDiff : na, "OF 差值", color=color.new(color.white, 30), linewidth=1)
+plot(showHist and histMode != "差值" ? ofSig : na, "訊號線", color=color.new(color.yellow, 30), linewidth=1)
+hline(0, "零軸", color=color.new(color.gray, 50))
+plot(showLines ? near5 : na, "近期收斂度 near", color=color.new(color.orange, 0), linewidth=showHist ? 1 : 2)
+plot(showLines ? far5 : na,  "遠期重疊度 far",  color=color.new(color.teal, 0),   linewidth=showHist ? 1 : 2)
 hline(thNear, "近期門檻", color=color.new(color.orange, 60), linestyle=hline.style_dashed)
 hline(thFar,  "遠期門檻", color=color.new(color.teal, 60),   linestyle=hline.style_dashed)
 hline(thBase, "舊區間門檻", color=color.new(color.gray, 60), linestyle=hline.style_dotted)
