@@ -1,0 +1,5 @@
+import sys; sys.path.insert(0, '/home/claude/bt/fac')
+exec(open('/home/claude/bt/fac/exit_lab.py').read().split("\nif __name__")[0])
+eng_x(sc0, '換股門檻：跌出前 300', rank_k=10)
+eng_x(sc0, '幾乎不換股：只賣掉已離開股票池的（前 1500）', rank_k=50)
+print(pd.DataFrame(out).drop(columns='資料').to_string())
