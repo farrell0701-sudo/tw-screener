@@ -208,6 +208,81 @@ def ac_parts(o, h, l, c, v, dates, rc):
     return out
 
 
+# ───────────────────────── 短線事件版(T_ld 強勢股收斂突破) ─────────────────────────
+# 規則同研究回測(finlab_short_lite.py):T_ldf 前 10% 且產業 T_ldf 中位數在前 50% 的強勢股,出現三種收斂突破事件任一,
+# 隔日開盤買、持有 20 個交易日出場,同一天多檔依 T_ldf 由高到低。網站不套用漲跌停成交限制。
+SE_HOLD = 20
+
+
+def se_parts(h, l, c, v, rc, dates):
+    """回傳最近 SG_W 根:EMA12−EMA200、ATR、ATR%、20 日均成交額(實際)、上市根數、事件位元(1=①、2=②、4=③)。"""
+    n = len(c)
+    cs, hs, ls = pd.Series(c), pd.Series(h), pd.Series(l)
+    atr = pd.Series(true_range(h, l, c)).ewm(alpha=1 / 14, adjust=False).mean()
+    m20 = cs.rolling(20).mean()
+    sd20 = cs.rolling(20).std()
+    up = m20 + 2 * sd20
+    bw = 4 * sd20 / m20
+    squeeze = bw.rolling(10).min().shift(1) <= bw.rolling(120, min_periods=100).quantile(0.2).shift(1)
+    ev1 = squeeze & (cs > up) & (cs.shift(1) <= up.shift(1))
+    ev2 = squeeze & (bw > bw.shift(3) * 1.15) & (cs > up)
+    rng20 = (hs.rolling(20).max() - ls.rolling(20).min()) / atr
+    tight = rng20.shift(1) <= rng20.rolling(250, min_periods=150).quantile(0.3).shift(1)
+    ev3 = tight & (cs > hs.rolling(20).max().shift(1))
+    bits = ev1.astype(int) + 2 * ev2.astype(int) + 4 * ev3.astype(int)
+    amt20 = pd.Series(v * rc).rolling(20, min_periods=15).mean()
+    sl = slice(max(0, n - SG_W), n)
+    return {"dates": [d.strftime("%Y-%m-%d") for d in dates[sl]], "d": (ema(c, 12) - ema(c, 200))[sl], "atr": atr.values[sl],
+            "c": c[sl], "amt": amt20.values[sl], "age": np.arange(1, n + 1)[sl], "ev": bits.values[sl].astype(int)}
+
+
+def add_se(rows):
+    """橫斷面:逐日算 T_ldf(ATR 下限 = 全市場 ATR% 5 分位 × 股價)、股票池(上市滿 250 根、成交額 ≥ 全市場 20 分位)、
+    產業過濾、強勢股(前 10%),結果寫回每檔的 se 欄位(與該檔最近 SG_W 根對齊)。"""
+    recs = []
+    for r in rows:
+        x = r.pop("_se", None)
+        code = str(r["code"])
+        if x is None or not (len(code) == 4 and code.isdigit() and code[0] != "0"):   # 同回測:只看 4 位數普通股
+            continue
+        for i, d in enumerate(x["dates"]):
+            recs.append((d, r["code"], r.get("industry") or None, x["d"][i], x["atr"][i], x["c"][i], x["amt"][i], x["age"][i], x["ev"][i]))
+        r["_seDates"] = x["dates"]
+        r["_seEv"] = x["ev"]
+    if not recs:
+        return
+    D = pd.DataFrame(recs, columns=["date", "code", "ind", "d", "atr", "c", "amt", "age", "ev"])
+    out = []
+    for d, g in D.groupby("date"):
+        g = g.copy()
+        if len(g) < 300:   # 當天資料太少(例如只有少數股票更新到這天),略過
+            continue
+        floor = (g.atr / g.c).quantile(0.05)
+        univ = (g.age >= 250) & (g.amt >= g.amt.quantile(0.20))
+        t = (g.d / np.maximum(g.atr, floor * g.c)).where(univ)
+        gi = t.groupby(g.ind).transform("median").where(g.ind.notna() & univ)
+        gp = gi.rank(pct=True)
+        cur = t.where((gp >= 0.5) | gp.isna())
+        pct = cur.rank(pct=True)
+        g["t"], g["gp"], g["pct"] = t, gp, pct
+        out.append(g[["date", "code", "t", "gp", "pct"]])
+    if not out:
+        return
+    X = pd.concat(out)
+    X = {(a, b): (t, p, q) for a, b, t, p, q in zip(X.code, X.date, X.t, X.pct, X.gp)}
+    r2 = lambda x, k=3: None if x is None or not np.isfinite(x) else round(float(x), k)
+    for r in rows:
+        ds = r.pop("_seDates", None)
+        ev = r.pop("_seEv", None)
+        if not ds:
+            continue
+        t, p, gp = [], [], []
+        for d in ds:
+            a, b, q = X.get((r["code"], d), (None, None, None))
+            t.append(r2(a, 2)); p.append(r2(b)); gp.append(r2(q))
+        r["se"] = {"t": t, "p": p, "gp": gp, "ev": [int(e) for e in ev]}
+
+
 # ───────────────────────── 機器學習排序 ─────────────────────────
 # 用 2016~2021 年 Accum-v3 樣本外交易(scripts/model_train.csv,6,621 筆)訓練,預測單筆報酬。
 # 同一天訊號多時,網頁依「模型預測」由高到低排序。回測:2022~2026 年化約 37%(分數優先約 26%)。
@@ -349,6 +424,8 @@ def tech(df):
                            "h249": r6(h[-249:].max()), "v19": float(v[-19:].sum())}
     if MODEL:
         out["_mlX"] = ml_feats(h, l, c, v)
+    if n >= 260:
+        out["_se"] = se_parts(h, l, c, v, rc, df.index)
     return out
 
 
@@ -405,6 +482,9 @@ def main():
             for r, X in zip(owners, mats):
                 r["ac"]["ml"] = [round(float(x), 2) for x in P[k:k + len(X)]]
                 k += len(X)
+    add_se(rows)
+    for r in rows:
+        r.pop("_se", None)
     model = train_model()
     add_ml(rows, model)
     for r in rows:
@@ -415,7 +495,7 @@ def main():
         r["mcapRank"] = i
     tz = timezone(timedelta(hours=8))
     payload = {"updated": datetime.now(tz).strftime("%Y-%m-%d %H:%M"), "weeks": weeks,
-               "abParams": AB_P, "vcpParams": VCP_P,
+               "abParams": AB_P, "vcpParams": VCP_P, "seHold": SE_HOLD,
                "bull": (BULL[max(BULL)] if BULL else None), "bullNx": BULL_NX or None, "bullDate": (max(BULL).strftime("%Y-%m-%d") if BULL else None), "stocks": rows}
     import os
     if os.environ.get("DEMO_NOTE"):
