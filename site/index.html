@@ -130,12 +130,13 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
     <form id="f" autocomplete="off">
       <fieldset>
         <legend>顯示範圍</legend>
-        <label class="check"><input type="checkbox" id="scAc" data-def="1" checked> Accum V3C-PRO</label>
-        <label class="check"><input type="checkbox" id="scAb" data-def="1" checked> A→B 突破</label>
+        <label class="check"><input type="checkbox" id="scSe" data-def="1" checked> 短線事件版(T_ld 強勢股收斂突破)</label>
+        <label class="check"><input type="checkbox" id="scAc" data-def="0"> Accum V3C-PRO</label>
+        <label class="check"><input type="checkbox" id="scAb" data-def="0"> A→B 突破</label>
         <label class="check"><input type="checkbox" id="scAnd" data-def="0"> 須同時符合(不勾 = 符合任一)</label>
         <div class="row"><label for="scopeDays">訊號在近幾日內</label>
           <select id="scopeDays" data-def="5"><option>0</option><option>1</option><option>3</option><option selected>5</option><option>10</option><option>20</option></select></div>
-        <div class="sub">兩項都不勾 = 顯示全部股票。盤中會用即時價把「今天」當成一根新 K 棒判斷 V3C-PRO(標「盤中」,成交值用到目前為止的量,大盤用昨收判斷),收盤後資料更新前也一樣。Accum V3C-PRO 的條件在下方「Accum V3C-PRO 條件」調整;A→B 突破使用固定規則。</div>
+        <div class="sub">都不勾 = 顯示全部股票。短線事件版只算收盤資料(盤中不判斷),勾選時「策略排序」依 T_ld 排名。盤中會用即時價把「今天」當成一根新 K 棒判斷 V3C-PRO(標「盤中」,成交值用到目前為止的量,大盤用昨收判斷),收盤後資料更新前也一樣。Accum V3C-PRO 的條件在下方「Accum V3C-PRO 條件」調整;A→B 突破使用固定規則。</div>
       </fieldset>
       <fieldset>
         <legend>大戶籌碼</legend>
@@ -240,6 +241,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
       <div id="cards"></div>
       <div class="empty" id="empty" hidden>沒有符合條件的股票。可以把「訊號在近幾日內」放寬、降低評分門檻,或取消勾選顯示範圍。</div>
       <details class="note"><summary>欄位與型態說明</summary>
+        <p>短線事件版(預設):先在 4 位數普通股中取上市滿 250 根、20 日均成交額 ≥ 全市場 20 分位的股票,計算 T_ldf =(EMA12 − EMA200)÷ max(ATR14, 全市場 ATR% 的 5 分位 × 股價);所屬產業的 T_ldf 中位數須在全市場前 50%(無產業的不受限),通過後 T_ldf 排名前 10% 為強勢股。強勢股當天收盤出現任一事件即為訊號:① 近 10 日內布林帶寬(4σ ÷ 中軌)曾 ≤ 自身前 120 日 20 分位,今天收盤首次站上布林上軌;② 同樣收斂,帶寬比 3 天前擴大 15% 以上且收盤在上軌之上;③ 到昨天為止 20 日高低區間 ÷ ATR ≤ 自身前 250 日 30 分位,今天收盤突破前 20 日最高價。隔日開盤買進,同一天多檔依 T_ldf 由高到低(即「策略排序」,前 10 名加底色,下方小字是 T_ld);固定 10 檔、每檔 10%,持有 20 個交易日後隔日開盤賣出,不設停損,已持有的不加買。技術型態標籤顯示最近 21 個交易日內每種事件最近一次成立是幾天前(只算當天是強勢股的日子)。網站不考慮漲跌停買不到或賣不掉的情況。回測(2016 年起、含手續費與證交稅、多路徑中位數)年化約 40%、最大回撤約 −27%;FinLab 單一路徑約 34%、2010~2015 保留樣本約 21%。</p>
         <p>大戶比例:集保戶股權分散表中,持股超過 100 張(100,001 股以上)、400 張以上或 1,000 張以上級距合計佔集保庫存的比例;網站只保留最新 12 週。連增週數:最新一週往回算,比例連續比前一週高的週數。</p>
         <p>A→B 突破:前 60 根實體高點 H 被收盤突破,H 之前 30 根內有 ≥25% 的起漲(A 段),H 之後至少整理 5 根(B 段);並要求 EMA150 十日斜率 ≥0.2%/日、收盤在當日區間上 25%、突破前 5 根平均波動不高於前 60 根平均。</p>
         <p>收斂後突破:一根放量或大振幅的長紅創 10 日新高後,4~25 根實體收斂、末段波動降到推升時的 60% 以下,收盤站上收斂區實體上緣;推升幅度 ≥20%。</p>
@@ -255,8 +257,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const KEY = 'chiplens-filters-v6';   // v6:V3C-PRO(停損上限 15%、不勾量比),舊的設定不沿用
-const FIELDS = ['scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acAbove','acS200','acS200v','acPos','acPosDd','acPosAtr','acLim','acLimv','acExInd','exK','exMin','exMax','exBe','exBeKeep','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acTv','acTvv','acSc','acScv','scAtr','scDd','scTv','scPx','vc','slope','res','e20','e60','q'];
+const KEY = 'chiplens-filters-v7';   // v7:預設改為短線事件版,舊的設定不沿用
+const FIELDS = ['scSe','scAc','scAb','scAnd','scopeDays','lvl','streak','cmpw','dmin','pmin','pxmax','rank','mkt','ind','ab','vcp','acBull','acAbove','acS200','acS200v','acPos','acPosDd','acPosAtr','acLim','acLimv','acExInd','exK','exMin','exMax','exBe','exBeKeep','acBbg','acBbgv','acBbs','acBbsv','acNh','acNhv','acSpk','acSpkv','acG1','acVrv','acPlo','acPhi','acG2','acNlo','acNhi','acTv','acTvv','acSc','acScv','scAtr','scDd','scTv','scPx','vc','slope','res','e20','e60','q'];
 let DATA = null, rows = [], sortKey = '_rank', sortDir = 1, view = 'ratio';
 
 // ── 即時報價(經 Cloudflare Worker 轉交富果 API,金鑰只存在 Worker 端)──
@@ -465,6 +467,21 @@ function acFind(s){
   return last;
 }
 
+// 短線事件版:最近 21 根中,當天是強勢股(T_ldf 前 10%、產業過濾通過)且出現事件 ①②③ 的日子
+const SE_STRONG = 0.9, SE_NAME = {1:'① 布林首破上軌', 2:'② 布林帶寬張開', 4:'③ 突破 20 日高'};
+function seFind(s){
+  s._seD = null; s._seE = {}; s._tld = null; s._tldP = null; s._seN = 0;
+  const x = s.se; if (!x || !x.ev) return;
+  const n = x.ev.length;
+  s._tld = x.t[n-1]; s._tldP = x.p[n-1];
+  for (let i = n - 1; i >= 0; i--){
+    if (!x.ev[i] || x.p[i] == null || x.p[i] < SE_STRONG) continue;
+    const d = n - 1 - i; s._seN++;
+    if (s._seD == null) s._seD = d;
+    for (const b of [1,2,4]) if ((x.ev[i] & b) && s._seE[b] == null) s._seE[b] = d;
+  }
+}
+
 function derive(){
   ACC = acCfg(); LIVE_DAY = liveDay();
   const lvl = $('lvl').value, w = Math.max(1, Math.min(12, num($('cmpw').value) || 4));
@@ -477,6 +494,7 @@ function derive(){
     s._wk = (n > 1 && a[n-1] != null && a[n-2] != null) ? +(a[n-1]-a[n-2]).toFixed(2) : null;
     s._streak = streakOf(a);
     const A = acFind(s); s._vb = A ? A.d : null; s._score = A ? A.sc : null; s._ml = A ? A.ml : null; s._grp = A ? A.grp : null; s._vbN = A ? A.cnt : null; s._vbLive = !!(A && A.live);
+    seFind(s);
     s._back = A ? A.back : false; s._ex = A ? A.ex : null; s._px = s._ex ? s._ex.px : null; s._stopD = s._ex ? s._ex.dist : null;
     const L = liveOn ? live[s.code] : null;
     s._c = L ? L.price : s.close;
@@ -486,6 +504,7 @@ function derive(){
 
 function pass(s){
   const D = Number($('scopeDays').value), sel = [];
+  if ($('scSe').checked) sel.push(s._seD != null && s._seD <= D);
   if ($('scAc').checked) sel.push(s._vb != null && s._vb <= D);
   if ($('scAb').checked) sel.push(s.ab != null && s.ab <= D);
   if (sel.length && !($('scAnd').checked ? sel.every(Boolean) : sel.some(Boolean))) return false;
@@ -571,8 +590,10 @@ function priceSpark(s){
 // 「已出現幾次」:最近約 21 個交易日內訊號出現的次數(舊資料沒有次數就不顯示)
 const times = n => n == null ? '' : `・已出現${n}次`;
 const TIP = ' title="最近 21 個交易日內這個訊號出現的次數"';
+const dago = d => d===0 ? '今日' : d+'日前';
 function techTags(s){
   const t = [];
+  for (const b of [1,2,4]) if (s._seE && s._seE[b] != null) t.push(`<span class="tag ${s._seE[b]<=1?'hot':'on'}" title="訊號日收盤後成立、隔日開盤買,持有 ${DATA.seHold||20} 個交易日">${SE_NAME[b]} ${dago(s._seE[b])}</span>`);
   if (s.ab != null) t.push(`<span class="tag ${s.ab<=1?'hot':'on'}"${TIP}>A→B ${s.ab===0?'今日':s.ab+'日前'}${times(s.abN)}</span>`);
   if (s._vb != null) t.push(`<span class="tag ${s._vb<=1?'hot':'on'}"${TIP}>V3C-PRO ${s._vbLive?'盤中':s._vb===0?'今日':s._vb+'日前'}${times(s._vbN)}${s._back?'・[回]':''}${s._grp?'・'+s._grp+'組':''}</span>`);
   if (s.vcp != null) t.push(`<span class="tag ${s.vcp<=1?'hot':'on'}"${TIP}>收斂突破 ${s.vcp===0?'今日':s.vcp+'日前'}${times(s.vcpN)}</span>`);
@@ -581,6 +602,12 @@ function techTags(s){
   if (L && s.res120 > 0 && s.close && L.price > s.close * (1 + s.res120/100)) t.push('<span class="tag hot">盤中創120日高</span>');
   if (s.aboveE20 && s.aboveE60) t.push('<span class="tag">站上20/60</span>');
   return t.join('') || '<span class="ind">—</span>';
+}
+
+function rankCell(s){
+  if (s._rank == null) return '<span class="ind">—</span>';
+  if (s._rankSe) return `<span class="streak ${s._rank<=10?'s3':''}" title="T_ldf ${fmt(s._tld)}、強勢股百分位 ${fmt(s._tldP*100,1)}">${s._rank}</span><div class="ind num">T_ld ${fmt(s._tld,1)}</div>`;
+  return `<span class="streak ${s._rank<=8?'s3':''}">${s._rank}</span><div class="ind num">${s._score} 分</div>`;
 }
 
 function stopCell(s){
@@ -595,10 +622,16 @@ function tvLink(s){ return `https://tw.tradingview.com/chart/?symbol=${s.market=
 function render(skipLive){
   derive(); header();
   rows = DATA.stocks.filter(pass);
-  // 策略排序:有 V3C-PRO 訊號的股票依「分數高 → 實際股價低 → 大戶比例變化大」排名(1 = 最優先買進)
-  const byStrat = (a,b) => (b._score - a._score) || ((a._px ?? 1e9) - (b._px ?? 1e9)) || ((b._delta ?? -1e9) - (a._delta ?? -1e9));
-  DATA.stocks.forEach(s => { s._rank = null; });
-  rows.filter(s => s._score != null).sort(byStrat).forEach((s,i) => { s._rank = i + 1; });
+  // 策略排序:勾短線事件版時,篩選後有事件的強勢股依 T_ld 由高到低(1 = 最優先,前 10 名加底色);
+  // 否則沿用 V3C-PRO:分數高 → 實際股價低 → 大戶比例變化大
+  DATA.stocks.forEach(s => { s._rank = null; s._rankSe = false; });
+  if ($('scSe').checked) {
+    rows.filter(s => s._seD != null && s._tld != null && s._seD <= Number($('scopeDays').value))
+      .sort((a,b) => (b._tld - a._tld) || (a._seD - b._seD)).forEach((s,i) => { s._rank = i + 1; s._rankSe = true; });
+  } else {
+    const byStrat = (a,b) => (b._score - a._score) || ((a._px ?? 1e9) - (b._px ?? 1e9)) || ((b._delta ?? -1e9) - (a._delta ?? -1e9));
+    rows.filter(s => s._score != null).sort(byStrat).forEach((s,i) => { s._rank = i + 1; });
+  }
   const key = sortKey;
   rows.sort((a,b) => {
     const x = key==='code' ? a.code : a[key], y = key==='code' ? b.code : b[key];
@@ -619,7 +652,7 @@ function render(skipLive){
     <td><span class="streak ${s._streak>=3?'s3':''}">${s._streak}</span></td>
     <td>${weekBars(s)}</td>
     <td class="num">${s._ml==null?'<span class="ind">—</span>':`<b class="${cls(s._ml)}">${sign(s._ml,1)}%</b>`}</td>
-    <td class="num">${s._rank==null?'<span class="ind">—</span>':`<span class="streak ${s._rank<=8?'s3':''}">${s._rank}</span><div class="ind num">${s._score} 分</div>`}</td>
+    <td class="num">${rankCell(s)}</td>
     <td class="num">${stopCell(s)}</td>
     <td class="num">${s.mcap==null?'—':Math.round(s.mcap).toLocaleString()}<div class="ind num">${s.mcapRank?'#'+s.mcapRank:''}</div></td>
     <td class="l">${techTags(s)}</td>
@@ -638,7 +671,7 @@ function card(s){
   const L = liveOn ? live[s.code] : null, x = s._ex;
   const stop = !x ? '' : x.hit != null ? `<span>停損 <b>已觸發</b></span>` : `<span>停損 <b>${fmt(x.stop)}</b> −${fmt(x.dist,1)}%${x.armed?' 保本':''}</span>`;
   return `<div class="card">
-    <div class="c1"><div class="rk num">${s._rank==null?'<span class="ind">—</span>':`<span class="streak ${s._rank<=8?'s3':''}">${s._rank}</span><div class="ind">${s._score} 分</div>`}</div>
+    <div class="c1"><div class="rk num">${rankCell(s)}</div>
       <div class="nm stk"><span class="code">${esc(s.code)}</span><a href="${tvLink(s)}" target="_blank" rel="noopener">${esc(s.name)}</a><span class="mk">${s.market==='TPEX'?'櫃':'市'}</span><div class="ind">${esc(s.industry)}</div></div>
       <div class="px num">${L ? '<span class="lvdot">●</span>' : ''}<b>${fmt(s._c)}</b><div class="${cls(s._chg)}">${sign(s._chg)}%</div></div></div>
     <div class="c2"><span>大戶 <b>${fmt(s._p)}%</b> <span class="${cls(s._delta)}">Δ${sign(s._delta)}</span></span><span>連增 <b>${s._streak}</b> 週</span>${stop}${s._ml==null?'':`<span>模型 <b class="${cls(s._ml)}">${sign(s._ml,1)}%</b></span>`}</div>
