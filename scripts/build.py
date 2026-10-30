@@ -246,12 +246,12 @@ def add_se(rows):
         if x is None or not (len(code) == 4 and code.isdigit() and code[0] != "0"):   # 同回測:只看 4 位數普通股
             continue
         for i, d in enumerate(x["dates"]):
-            recs.append((d, r["code"], r.get("industry") or None, x["d"][i], x["atr"][i], x["c"][i], x["amt"][i], x["age"][i], x["ev"][i]))
+            recs.append((d, r["code"], r.get("industry") or None, x["d"][i], x["atr"][i], x["c"][i], x["amt"][i], x["age"][i], x["ev"][i], x["c"][i - 5] if i >= 5 else np.nan))
         r["_seDates"] = x["dates"]
         r["_seEv"] = x["ev"]
     if not recs:
         return
-    D = pd.DataFrame(recs, columns=["date", "code", "ind", "d", "atr", "c", "amt", "age", "ev"])
+    D = pd.DataFrame(recs, columns=["date", "code", "ind", "d", "atr", "c", "amt", "age", "ev", "c5"])
     out = []
     for d, g in D.groupby("date"):
         g = g.copy()
@@ -265,11 +265,17 @@ def add_se(rows):
         cur = t.where((gp >= 0.5) | gp.isna())
         pct = cur.rank(pct=True)
         g["t"], g["gp"], g["pct"] = t, gp, pct
-        out.append(g[["date", "code", "t", "gp", "pct"]])
+        # 急跌反彈候選用:股票池內未做產業過濾的 T_ldf 百分位、ATR% 百分位、5 日報酬百分位(越低越超跌)
+        g["pu"] = t.rank(pct=True)
+        g["ar"] = (g.atr / g.c).where(univ).rank(pct=True)
+        g["r5"] = (g.c / g.c5 - 1).where(univ)
+        g["r5r"] = g["r5"].rank(pct=True)
+        out.append(g[["date", "code", "t", "gp", "pct", "pu", "ar", "r5", "r5r"]])
     if not out:
         return
     X = pd.concat(out)
-    X = {(a, b): (t, p, q) for a, b, t, p, q in zip(X.code, X.date, X.t, X.pct, X.gp)}
+    maxd = X.date.max()
+    X = {(a, b): (t, p, q, u, ar, r5, r5r) for a, b, t, p, q, u, ar, r5, r5r in zip(X.code, X.date, X.t, X.pct, X.gp, X.pu, X.ar, X.r5, X.r5r)}
     r2 = lambda x, k=3: None if x is None or not np.isfinite(x) else round(float(x), k)
     for r in rows:
         ds = r.pop("_seDates", None)
@@ -278,9 +284,69 @@ def add_se(rows):
             continue
         t, p, gp = [], [], []
         for d in ds:
-            a, b, q = X.get((r["code"], d), (None, None, None))
+            a, b, q = X.get((r["code"], d), (None,) * 7)[:3]
             t.append(r2(a, 2)); p.append(r2(b)); gp.append(r2(q))
         r["se"] = {"t": t, "p": p, "gp": gp, "ev": [int(e) for e in ev]}
+        if ds[-1] == maxd and (r["code"], maxd) in X:
+            _, _, _, u, ar, r5, r5r = X[(r["code"], maxd)]
+            if np.isfinite(u) and np.isfinite(ar) and np.isfinite(r5r):
+                r["pb"] = {"pu": r2(u), "ar": r2(ar), "r5": r2(r5 * 100, 1), "r5r": r2(r5r),
+                           "ok": bool(u >= PB_TLD and ar >= PB_ATR and r5r <= PB_R5)}
+
+
+# ───────────────────────── 急跌反彈(超跌組) ─────────────────────────
+# 研究回測:大盤 3 日跌 ≥3% 且收盤跌破 20 日布林下軌 = 急跌事件(5 日內不重複);事件後 15 個交易日內「第一根」單日漲 ≥2%(弱)/≥3%(強)的反彈日,
+# 隔日開盤買 T_ldf 前 10% + ATR% 前 30% + 5 日報酬後 50%(超跌)的股票、持有 5 個交易日。獨立反彈日只有約 9(≥3%)~25(≥2%)個,屬少見機會,僅供參考。
+PB_TLD, PB_ATR, PB_R5, PB_HOLD, PB_WIN = 0.9, 0.7, 0.5, 5, 15
+
+
+def panic_state(upto=None):
+    f = DATA / "prices" / "TAIEX.csv"
+    if not f.exists():
+        return None
+    d = pd.read_csv(f, index_col=0, parse_dates=True).dropna(subset=["Close"])
+    c = d["Close"].astype(float)
+    if upto:
+        c = c[:upto]
+    if len(c) < 40:
+        return None
+    r3 = c / c.shift(3) - 1
+    r1 = c.pct_change()
+    m20, sd = c.rolling(20).mean(), c.rolling(20).std()
+    low = m20 - 2 * sd
+    ev0 = ((r3 <= -0.03) & (c < low)).values
+    n = len(c)
+    first = [i for i in range(n) if ev0[i] and not ev0[max(0, i - 5):i].any()]
+    sig = []   # (索引, 強弱)
+    for e in first:
+        got = set()
+        for t in range(e + 1, min(e + 1 + PB_WIN, n)):
+            for k, thr in ((3, 0.03), (2, 0.02)):
+                if k not in got and r1.iloc[t] >= thr:
+                    got.add(k)
+                    sig.append((t, k, e))
+    last = n - 1
+    ds = lambda i: c.index[i].strftime("%Y-%m-%d")
+    out = {"date": ds(last), "close": round(float(c.iloc[-1]), 2), "r1": round(float(r1.iloc[-1] * 100), 2), "r3": round(float(r3.iloc[-1] * 100), 2),
+           "toLow": round(float((c.iloc[-1] / low.iloc[-1] - 1) * 100), 2), "below": bool(c.iloc[-1] < low.iloc[-1]), "hold": PB_HOLD,
+           "state": "none"}
+    rec = [(t, k, e) for t, k, e in sig if last - t <= PB_HOLD]
+    if rec:
+        t, k, e = max(rec, key=lambda x: (x[0], x[1]))
+        lastev = max((i for i in range(n) if ev0[i]), default=-1)
+        if lastev > t:   # 反彈之後又出現新的急跌(破下軌且 3 日跌 ≥3%),以最新急跌為準,重新等反彈
+            out.update(state="panic", evDate=ds(lastev), evAge=last - lastev, evR3=round(float(r3.iloc[lastev] * 100), 2))
+            return out
+        out.update(state="rebound", tier=("strong" if k == 3 else "weak"), sigDate=ds(t), sigPct=round(float(r1.iloc[t] * 100), 2), age=last - t, evDate=ds(e))
+        return out
+    used = {e for _, _, e in sig}   # 已出現過反彈訊號的急跌事件,不再當作「等待反彈」
+    act = [e for e in first if e not in used and (0 < last - e <= PB_WIN or last == e)]
+    if act:
+        e = act[-1]
+        out.update(state="panic", evDate=ds(e), evAge=last - e, evR3=round(float(r3.iloc[e] * 100), 2))
+    elif bool(ev0[last]):
+        out.update(state="panic", evDate=ds(last), evAge=0, evR3=round(float(r3.iloc[last] * 100), 2))
+    return out
 
 
 # ───────────────────────── 機器學習排序 ─────────────────────────
@@ -495,7 +561,7 @@ def main():
         r["mcapRank"] = i
     tz = timezone(timedelta(hours=8))
     payload = {"updated": datetime.now(tz).strftime("%Y-%m-%d %H:%M"), "weeks": weeks,
-               "abParams": AB_P, "vcpParams": VCP_P, "seHold": SE_HOLD,
+               "abParams": AB_P, "vcpParams": VCP_P, "seHold": SE_HOLD, "panic": panic_state(),
                "bull": (BULL[max(BULL)] if BULL else None), "bullNx": BULL_NX or None, "bullDate": (max(BULL).strftime("%Y-%m-%d") if BULL else None), "stocks": rows}
     import os
     if os.environ.get("DEMO_NOTE"):
