@@ -1,0 +1,58 @@
+name: 補抓 2004~2014 除權息與減資事件
+
+on:
+  workflow_dispatch: {}      # 沒抓完就再按一次 Run workflow,會自動接續
+  push:
+    branches: [claude/project-thread-7ntkeb]
+    paths: [scripts/fetch_oldev.py, .github/workflows/oldev.yml]
+
+permissions:
+  contents: write
+  actions: write            # 沒抓完時自動再觸發下一輪
+
+concurrency:
+  group: chips               # 與其他 FinMind 下載共用額度,排隊執行
+  cancel-in-progress: false
+
+jobs:
+  oldev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安裝套件
+        run: pip install pandas requests
+      - name: 取回之前已抓的部分與舊股價清單
+        run: |
+          git clone -q --depth 1 -b oldev-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out_oldev || mkdir -p out_oldev
+          rm -rf out_oldev/.git
+          git clone -q --depth 1 -b old-data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" old_src
+      - name: 下載
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          STATUS_FILE: ${{ github.workspace }}/oldev_status.txt
+        run: python scripts/fetch_oldev.py
+      - name: 存到分支 oldev-data
+        if: always()
+        run: |
+          cd out_oldev
+          git init -q -b oldev-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "舊事件 $(date -u +'%Y-%m-%d %H:%M')" || exit 0
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" oldev-data
+      - name: 沒抓完就自動再跑一輪
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$(cat oldev_status.txt 2>/dev/null)" = "MORE" ]; then
+            gh workflow run oldev.yml --ref "${{ github.ref_name }}" -R "${{ github.repository }}"
+            echo "已觸發下一輪"
+          else
+            echo "全部完成"
+          fi
