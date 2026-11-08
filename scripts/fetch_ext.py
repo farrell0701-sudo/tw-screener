@@ -78,4 +78,6 @@ if __name__ == "__main__":
     fm("TaiwanOptionInstitutionalInvestors", "TXO")
     fm("TaiwanExchangeRate", "USD")
     fm("TaiwanExchangeRate", "JPY")
+    fm("TaiwanStockDispositionSecuritiesPeriod", y0=2010)   # 處置股期間（研究融資可行性）
+    fm("TaiwanStockAttentionSecurities", y0=2010)          # 注意股（名稱若不存在會記錄失敗）
     (OUT / "README.md").write_text("外部市場資料（急殺預警研究用）\n\n```\n" + "\n".join(LOG) + "\n```\n", encoding="utf-8")
