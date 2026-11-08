@@ -68,6 +68,38 @@ def yahoo():
     if out:
         pd.DataFrame(out).sort_index().to_csv(OUT / "yahoo.csv", encoding="utf-8-sig")
 
+def disposal():
+    """證交所處置公告（rwd API），按季抓；櫃買中心嘗試兩個端點，失敗只記錄。"""
+    frames = []
+    for y in range(2012, END + 1):
+        for q0, q1 in (("0101", "0331"), ("0401", "0630"), ("0701", "0930"), ("1001", "1231")):
+            u = f"https://www.twse.com.tw/rwd/zh/announcement/punish?startDate={y}{q0}&endDate={y}{q1}&response=json"
+            try:
+                j = requests.get(u, timeout=60, headers={"User-Agent": "Mozilla/5.0"}).json()
+                rows, fields = j.get("data") or [], j.get("fields") or []
+                if rows: frames.append(pd.DataFrame(rows, columns=fields[:len(rows[0])]).assign(market="TWSE"))
+            except Exception as e:  # noqa: BLE001
+                log(f"  TWSE 處置 {y}{q0} 失敗 {e}")
+            time.sleep(3)
+    for u in ["https://www.tpex.org.tw/www/zh-tw/bulletin/disposal?response=json&startDate=2012/01/01&endDate=" + pd.Timestamp.today().strftime("%Y/%m/%d"),
+              "https://www.tpex.org.tw/openapi/v1/tpex_disposal_information"]:
+        try:
+            r = requests.get(u, timeout=60, headers={"User-Agent": "Mozilla/5.0"}); j = r.json()
+            tb = j.get("tables", [{}])[0] if isinstance(j, dict) and "tables" in j else None
+            if tb and tb.get("data"):
+                frames.append(pd.DataFrame(tb["data"], columns=tb.get("fields")).assign(market="TPEx")); log(f"[OK] TPEx 處置 {u[:60]} {len(tb['data'])}")
+            elif isinstance(j, list) and j:
+                frames.append(pd.DataFrame(j).assign(market="TPEx")); log(f"[OK] TPEx 處置 openapi {len(j)}（只有近期）")
+            else:
+                log(f"[空] TPEx 處置 {u[:60]} 回應 {r.status_code} {str(j)[:120]}")
+        except Exception as e:  # noqa: BLE001
+            log(f"[失敗] TPEx 處置 {u[:60]} {e}")
+    if frames:
+        d = pd.concat(frames, ignore_index=True); d.to_csv(OUT / "disposal.csv", index=False, encoding="utf-8-sig")
+        log(f"[OK] 處置股 {d.shape} 欄位 {list(d.columns)[:12]}")
+    else:
+        log("[空] 處置股")
+
 if __name__ == "__main__":
     log(f"token: {'有' if TOKEN else '無'}")
     yahoo()
@@ -78,6 +110,5 @@ if __name__ == "__main__":
     fm("TaiwanOptionInstitutionalInvestors", "TXO")
     fm("TaiwanExchangeRate", "USD")
     fm("TaiwanExchangeRate", "JPY")
-    fm("TaiwanStockDispositionSecuritiesPeriod", y0=2010)   # 處置股期間（研究融資可行性）
-    fm("TaiwanStockAttentionSecurities", y0=2010)          # 注意股（名稱若不存在會記錄失敗）
+    disposal()   # 處置股（證交所／櫃買中心公告；FinMind 此資料需付費等級）
     (OUT / "README.md").write_text("外部市場資料（急殺預警研究用）\n\n```\n" + "\n".join(LOG) + "\n```\n", encoding="utf-8")
