@@ -110,5 +110,6 @@ if __name__ == "__main__":
     fm("TaiwanOptionInstitutionalInvestors", "TXO")
     fm("TaiwanExchangeRate", "USD")
     fm("TaiwanExchangeRate", "JPY")
+    fm("TaiwanStockHoldingSharesPer", "2330", y0=2024)   # 集保股權分散表權限測試（只抓 2330）
     disposal()   # 處置股（證交所／櫃買中心公告；FinMind 此資料需付費等級）
     (OUT / "README.md").write_text("外部市場資料（急殺預警研究用）\n\n```\n" + "\n".join(LOG) + "\n```\n", encoding="utf-8")
