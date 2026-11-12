@@ -1,0 +1,13 @@
+token: 有
+TaiwanStockFinancialStatements 2330 status 200 msg success 筆數 987 最早 2000-06-30 最晚(≤2014) 2014-12-31
+TaiwanStockFinancialStatements 1101 status 200 msg success 筆數 984 最早 2000-03-31 最晚(≤2014) 2014-12-31
+TaiwanStockFinancialStatements 2317 status 200 msg success 筆數 984 最早 2000-03-31 最晚(≤2014) 2014-12-31
+TaiwanStockBalanceSheet 2330 status 200 msg success 筆數 866 最早 2012-12-31 最晚(≤2014) 2014-12-31
+TaiwanStockBalanceSheet 1101 status 200 msg success 筆數 758 最早 2012-12-31 最晚(≤2014) 2014-12-31
+TaiwanStockBalanceSheet 2317 status 200 msg success 筆數 854 最早 2012-12-31 最晚(≤2014) 2014-12-31
+TaiwanStockPER 2330 status 200 msg success 筆數 2322 最早 2005-09-02 最晚(≤2014) 2014-12-31
+TaiwanStockPER 1101 status 200 msg success 筆數 2322 最早 2005-09-02 最晚(≤2014) 2014-12-31
+TaiwanStockPER 2317 status 200 msg success 筆數 2322 最早 2005-09-02 最晚(≤2014) 2014-12-31
+TaiwanStockCashFlowsStatement 2330 status 200 msg success 筆數 364 最早 2012-03-31 最晚(≤2014) 2014-12-31
+TaiwanStockCashFlowsStatement 1101 status 200 msg success 筆數 491 最早 2008-06-30 最晚(≤2014) 2014-12-31
+TaiwanStockCashFlowsStatement 2317 status 200 msg success 筆數 345 最早 2012-03-31 最晚(≤2014) 2014-12-31
