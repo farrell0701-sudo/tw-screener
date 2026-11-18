@@ -5,6 +5,8 @@
 import sys, traceback
 from pathlib import Path
 import numpy as np, pandas as pd
+try: sys.stdout.reconfigure(encoding='utf-8')
+except Exception: pass
 
 R = Path(sys.argv[1] if len(sys.argv) > 1 else 'tw-data')
 pd.set_option('display.width', 200); pd.set_option('display.max_columns', 30)
