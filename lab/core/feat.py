@@ -58,6 +58,19 @@ def stock_feats(c, h, l, a):
     return o
 
 
+def dvs_own(CA, VALID, W=60):
+    """下檔波動占比 DVS＝√Σ(r²; r<0) ÷ √Σr²，r＝個股自身有效日的還原日報酬，近 W 個有效日（至少 0.75W）。L-108P。"""
+    CA = np.asarray(CA); VALID = np.asarray(VALID); T, N = CA.shape; out = np.full((T, N), np.nan, np.float32)
+    mp = int(np.ceil(0.75 * W))
+    for j in range(N):
+        ii = np.flatnonzero(VALID[:, j])
+        if len(ii) <= mp: continue
+        c = CA[ii, j].astype(float); r = np.r_[np.nan, c[1:] / c[:-1] - 1]
+        s = pd.Series(r); neg = (s.where(s < 0, 0.0) ** 2).where(s.notna())
+        out[ii, j] = np.sqrt(neg.rolling(W, min_periods=mp).sum() / (s ** 2).rolling(W, min_periods=mp).sum()).values
+    return out
+
+
 def iakf_down(p_, smooth=250, nlook=10, thr=2.2, rej=0.05, decay=0.9):
     """大盤向下異常（IAKF 250/2.2）。輸入指數序列（可含 NaN），回傳 bool 陣列。"""
     p_ = np.asarray(p_, float); ratio = (2.0 / (smooth + 1)) ** 2; a = 2.0 / (nlook + 1); thr2 = thr ** 2
