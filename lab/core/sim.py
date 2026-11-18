@@ -33,7 +33,8 @@ def make_ctx(mode='compat', P=None, F=None, S=None, sig=None, start=None):
     ctx = dict(dates=dates, T=T_, N=N_, codes=M['security_key'].to_numpy(), fix=not md['bias3'],
                Ov=OA, CA=CA, Cf=Cf, VALID=VALID,
                RKX=np.asarray(S['RKX'], np.float32), RKV=np.asarray(S['RKV'], np.float32), ATRP=np.asarray(S['ATRP'], np.float32),
-               below=d['below'].to_numpy(bool), MD=d['bear_mode'].to_numpy(bool), OFF=d['off'].to_numpy(bool),
+               below=d['below'].to_numpy(bool) | (d['xgate'].to_numpy(bool) if 'xgate' in d else False),   # L-117：X1 開倉閘門可併入 xgate
+               MD=d['bear_mode'].to_numpy(bool), OFF=d['off'].to_numpy(bool),
                STALE=pd.DataFrame(VALID).rolling(20, min_periods=20).sum().values == 0,
                s0=int(dates.searchsorted(pd.Timestamp(start) if start else START)))
     if md['bias3']:
