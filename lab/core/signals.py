@@ -32,6 +32,7 @@ RULES = dict(
     x_steep=True, steep_up=0.05, steep_q=0.80, # 剔最陡：S60 ≥ 5% 者中前 20%
     x_rank='both',                             # both＝½T_ld＋½ΔT_ld10；tld；dtld；random
     x_dvs=None,                                # L-108P：(W, q)＝剔除強勢池內下檔波動占比最高的 q；None＝不剔
+    x_crowd=None,                              # L-114：(W, q)＝剔除強勢池內投機擁擠（½ 週轉率 W 日＋½ 融資使用率，池內百分位）最高的 q；None＝不剔
     # V4.1
     v_ind=True,        # 產業過濾：所屬產業 T_ld 中位數排名前 50%
     v_ev1=True, v_ev2=True,                    # 布林收斂突破、整理突破 20 日高
@@ -93,7 +94,13 @@ def compute(mode='compat', P=None, F=None, **sw):
         from feat import dvs_own
         Wd, qd = R['x_dvs']; DV = dvs_own(Cn, VV, Wd)
         dvsf = np.nan_to_num(prk(DV, pool)) > 1 - qd
-    candX = pool & ~(hot if R['x_hot'] else False) & ~(steep if R['x_steep'] else False) & ~dvsf
+    crowdf = np.zeros((T_, N_), bool)
+    if R['x_crowd']:
+        from chips import crowd
+        Wc, qc = R['x_crowd']; TU, MU = crowd(P, F, Wc); TU, MU = g(TU), g(MU)
+        sc = 0.5 * prk(TU, pool) + 0.5 * prk(MU, pool)          # 任一缺值 → 空值（不計分、不剔除）
+        crowdf = np.nan_to_num(prk(sc, pool & np.isfinite(sc))) > 1 - qc
+    candX = pool & ~(hot if R['x_hot'] else False) & ~(steep if R['x_steep'] else False) & ~dvsf & ~crowdf
     RKX = rank_desc(SCX, candX)
     below = (ix < ix.rolling(R['ma']).mean()).values
 
@@ -150,7 +157,7 @@ def compute(mode='compat', P=None, F=None, **sw):
         o = np.full((T_, len(M)), fill, dt); o[:, cols] = a; return o
     daily = pd.DataFrame(dict(
         n_valid=VV.sum(1), n_U=U.sum(1), n_pool=pool.sum(1), n_hot=(pool & hot).sum(1), n_up5=up5.sum(1),
-        n_steep=(pool & steep).sum(1), n_dvs=(pool & dvsf).sum(1), n_dvs_hs=(pool & dvsf & (hot | steep)).sum(1), n_candX=candX.sum(1), n_strongV=strong.sum(1), n_sig0=sig0.sum(1),
+        n_steep=(pool & steep).sum(1), n_dvs=(pool & dvsf).sum(1), n_dvs_hs=(pool & dvsf & (hot | steep)).sum(1), n_crowd=(pool & crowdf).sum(1), n_crowd_hs=(pool & crowdf & (hot | steep)).sum(1), n_candX=candX.sum(1), n_strongV=strong.sum(1), n_sig0=sig0.sum(1),
         n_deep=(sig0 & deep).sum(1), n_signal=signal.sum(1), below=below, bear_mode=MD, off=OFF,
         thrust_win=thrust_win.values, floor=floor, amt_q=amt_q), index=dates)
     return dict(RKX=full(RKX), RKV=full(RKV), ATRP=full(ATR / Cn), daily=daily, rules=R, mode=md,
