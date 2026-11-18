@@ -15,7 +15,8 @@ sys.path.insert(0, str(LAB / 'data'))
 from panel import load as load_panel, peak_mem_mb
 
 OUT = LAB / 'cache' / 'feat'
-F32 = ['CA', 'OA', 'HA', 'LA', 'ATR', 'NUM', 'AMT20', 'R20', 'S60', 'RRT']
+F32 = ['CA', 'OA', 'HA', 'LA', 'ATR', 'NUM', 'AMT20', 'AMT20V', 'R20', 'S60', 'RRT']
+# AMT20：未還原收盤 × 股數（參考實作，相容模式）；AMT20V：成交金額 value（修正模式，L-113 補充）
 BOOL = ['VALID', 'EV1', 'EV2', 'OLD']
 I32 = ['LAG20']     # 同一檔股票往前第 20 個有效日的列號（沒有則 −1），給 atr_ok 用
 
@@ -74,8 +75,8 @@ def iakf_down(p_, smooth=250, nlook=10, thr=2.2, rej=0.05, decay=0.9):
     return dn
 
 
-def build(adj='AF', amt_src='close_x_volume'):
-    """adj：AF 或 AF_C。amt_src：close_x_volume（同參考實作：未還原收盤 × 股數）或 value（成交金額）。"""
+def build(adj='AF'):
+    """adj：AF 或 AF_C。兩種成交額（AMT20、AMT20V）都算。"""
     t0 = time.time(); P = load_panel(); T, N = P['C'].shape
     out = OUT / adj; out.mkdir(parents=True, exist_ok=True)
     A = {f: np.lib.format.open_memmap(out / f'{f}.npy', 'w+', np.float32, (T, N)) for f in F32}
@@ -95,15 +96,15 @@ def build(adj='AF', amt_src='close_x_volume'):
         A['CA'][ii, j], A['OA'][ii, j], A['HA'][ii, j], A['LA'][ii, j] = c, o, h, l
         if len(ii) > 20: A['LAG20'][ii[20:], j] = ii[:-20]
         if len(ii) < 30: continue                                             # 同參考實作：少於 30 個有效日不算指標
-        amt = rc * np.asarray(P['V'][ii, j], float) if amt_src == 'close_x_volume' else np.asarray(P['AMT'][ii, j], float)
-        r = stock_feats(c, h, l, amt)
+        r = stock_feats(c, h, l, rc * np.asarray(P['V'][ii, j], float))
+        A['AMT20V'][ii, j] = pd.Series(np.asarray(P['AMT'][ii, j], float)).rolling(20, min_periods=15).mean().values
         for k in ('ATR', 'NUM', 'AMT20', 'R20', 'S60', 'RRT'): A[k][ii, j] = r[k]
         for k in ('EV1', 'EV2', 'OLD'): A[k][ii, j] = r[k]
     for f in A: A[f].flush()
     ix = P['index']['TAIEX_P']
     mk = pd.DataFrame({'IAKF_DN': iakf_down(ix.values)}, index=P['dates'])
     mk.reset_index(names='date').to_parquet(out / 'market.parquet', index=False)
-    info = dict(adj=adj, amt_src=amt_src, panel=P['info']['built'], tag=P['info']['tag'], seconds=round(time.time() - t0),
+    info = dict(adj=adj, panel=P['info']['built'], tag=P['info']['tag'], seconds=round(time.time() - t0),
                 peak_mb=round(peak_mem_mb()), valid_cells=int(VALID.sum()))
     (out / 'info.json').write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding='utf-8')
     return info
