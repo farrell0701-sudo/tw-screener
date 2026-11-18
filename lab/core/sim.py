@@ -17,14 +17,15 @@ FEE, TAX, SLIP = 0.00085, 0.003, 0.0015
 START = pd.Timestamp('2005-01-01')
 
 
-def make_ctx(mode='compat', P=None, F=None, S=None):
+def make_ctx(mode='compat', P=None, F=None, S=None, sig=None, start=None):
+    """mode：MODES 鍵或 dict；sig：訊號快取名稱（預設＝mode）；start：回測起點（預設 2005-01-01）。"""
     from panel import load as load_panel
     from feat import load_feat
     from signals import MODES, load_sig
     md = MODES[mode] if isinstance(mode, str) else mode
     P = P if P is not None else load_panel()
     F = F if F is not None else load_feat('AF_C' if md['bias2'] else 'AF')
-    S = S if S is not None else load_sig(mode)
+    S = S if S is not None else load_sig(sig or mode)
     dates = P['dates']; T_, N_ = P['C'].shape; M = P['meta']
     CA = np.asarray(F['CA'], np.float32); OA = np.asarray(F['OA'], np.float32); VALID = np.asarray(F['VALID'])
     Cf = pd.DataFrame(CA).ffill().values
@@ -34,7 +35,7 @@ def make_ctx(mode='compat', P=None, F=None, S=None):
                RKX=np.asarray(S['RKX'], np.float32), RKV=np.asarray(S['RKV'], np.float32), ATRP=np.asarray(S['ATRP'], np.float32),
                below=d['below'].to_numpy(bool), MD=d['bear_mode'].to_numpy(bool), OFF=d['off'].to_numpy(bool),
                STALE=pd.DataFrame(VALID).rolling(20, min_periods=20).sum().values == 0,
-               s0=int(dates.searchsorted(START)))
+               s0=int(dates.searchsorted(pd.Timestamp(start) if start else START)))
     if md['bias3']:
         # 參考實作的漲跌停鎖死推算（第 103–106 行），用未還原價
         RC = np.asarray(P['C'], float); RO = np.asarray(P['O'], float)
@@ -175,9 +176,9 @@ def mix(a, b, wa=0.6):
 
 # ---------- 多路徑（多程序）
 _CTX = None
-def _init(mode):
+def _init(mode, sig, start):
     global _CTX
-    _CTX = make_ctx(mode)
+    _CTX = make_ctx(mode, sig=sig, start=start)
 
 def _one(args):
     i, kind, kw = args
@@ -186,14 +187,14 @@ def _one(args):
     return i, kind, r, tr, ex
 
 
-def run_paths(mode='compat', npath=100, x_kw=None, v_kw=None, workers=None):
+def run_paths(mode='compat', npath=100, x_kw=None, v_kw=None, workers=None, sig=None, start=None):
     """回傳 dict：X、V 為各路徑（日報酬、交易、曝險）list。路徑 i：起始日錯開 i mod 20、種子 1000 + i、每日剔除 20% 候選（L-113 1b）。"""
     from multiprocessing import get_context
     x_kw = x_kw or {}; v_kw = v_kw or {}
     jobs = [(i, 'X', x_kw) for i in range(npath)] + [(i, 'V', v_kw) for i in range(npath)]
     workers = workers or max(1, min(6, (os.cpu_count() or 2) - 1))
     out = {'X': [None] * npath, 'V': [None] * npath}
-    with get_context('spawn').Pool(workers, initializer=_init, initargs=(mode,)) as pool:
+    with get_context('spawn').Pool(workers, initializer=_init, initargs=(mode, sig, start)) as pool:
         for i, kind, r, tr, ex in pool.imap_unordered(_one, jobs):
             out[kind][i] = (r, tr, ex)
     return out

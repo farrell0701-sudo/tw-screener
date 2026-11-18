@@ -151,12 +151,13 @@ def compute(mode='compat', P=None, F=None, **sw):
                 _dbg=dict(Tr=Tr, U=U, pool=pool, hot=hot, steep=steep, strong=strong, sig0=sig0, signal=signal, cols=cols))
 
 
-def build(name='compat', **sw):
-    t0 = time.time(); r = compute(name, **sw)
+def build(name='compat', mode=None, P=None, F=None, **sw):
+    """name：快取資料夾名稱；mode：MODES 的鍵或自訂 dict（預設＝name）；sw：規則開關。"""
+    t0 = time.time(); r = compute(mode or name, P=P, F=F, **sw)
     d = OUT / name; d.mkdir(parents=True, exist_ok=True)
     for k in ('RKX', 'RKV', 'ATRP'): np.save(d / f'{k}.npy', r[k])
     r['daily'].reset_index(names='date').to_parquet(d / 'daily.parquet', index=False)
-    info = dict(mode=name, flags=r['mode'], rules=r['rules'], seconds=round(time.time() - t0), peak_mb=round(peak_mem_mb()))
+    info = dict(name=name, flags=r['mode'], rules=r['rules'], seconds=round(time.time() - t0), peak_mb=round(peak_mem_mb()))
     (d / 'info.json').write_text(json.dumps(info, ensure_ascii=False, indent=1, default=str), encoding='utf-8')
     return info, r['daily']
 
