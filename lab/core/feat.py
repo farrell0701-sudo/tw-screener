@@ -75,14 +75,17 @@ def iakf_down(p_, smooth=250, nlook=10, thr=2.2, rej=0.05, decay=0.9):
     return dn
 
 
-def build(adj='AF'):
-    """adj：AF 或 AF_C。兩種成交額（AMT20、AMT20V）都算。"""
-    t0 = time.time(); P = load_panel(); T, N = P['C'].shape
-    out = OUT / adj; out.mkdir(parents=True, exist_ok=True)
-    A = {f: np.lib.format.open_memmap(out / f'{f}.npy', 'w+', np.float32, (T, N)) for f in F32}
-    for f in F32: A[f][:] = np.nan
-    for f in BOOL: A[f] = np.lib.format.open_memmap(out / f'{f}.npy', 'w+', np.bool_, (T, N))
-    A['LAG20'] = np.lib.format.open_memmap(out / 'LAG20.npy', 'w+', np.int32, (T, N)); A['LAG20'][:] = -1
+def compute(P, adj='AF', out=None):
+    """P：面板 dict（load_panel() 或記憶體中的子集）。out＝None 時回傳記憶體陣列，否則寫入該資料夾（記憶體映射）。"""
+    T, N = P['C'].shape
+    if out is None:
+        A = {f: np.full((T, N), np.nan, np.float32) for f in F32}
+        A.update({f: np.zeros((T, N), bool) for f in BOOL}); A['LAG20'] = np.full((T, N), -1, np.int32)
+    else:
+        A = {f: np.lib.format.open_memmap(out / f'{f}.npy', 'w+', np.float32, (T, N)) for f in F32}
+        for f in F32: A[f][:] = np.nan
+        for f in BOOL: A[f] = np.lib.format.open_memmap(out / f'{f}.npy', 'w+', np.bool_, (T, N))
+        A['LAG20'] = np.lib.format.open_memmap(out / 'LAG20.npy', 'w+', np.int32, (T, N)); A['LAG20'][:] = -1
     VALID = np.asarray(P['TRD']) & ~np.asarray(P['EMG']); A['VALID'][:] = VALID
     AF = P[adj]
     for j in range(N):
@@ -100,10 +103,18 @@ def build(adj='AF'):
         A['AMT20V'][ii, j] = pd.Series(np.asarray(P['AMT'][ii, j], float)).rolling(20, min_periods=15).mean().values
         for k in ('ATR', 'NUM', 'AMT20', 'R20', 'S60', 'RRT'): A[k][ii, j] = r[k]
         for k in ('EV1', 'EV2', 'OLD'): A[k][ii, j] = r[k]
-    for f in A: A[f].flush()
-    ix = P['index']['TAIEX_P']
-    mk = pd.DataFrame({'IAKF_DN': iakf_down(ix.values)}, index=P['dates'])
-    mk.reset_index(names='date').to_parquet(out / 'market.parquet', index=False)
+    A['market'] = pd.DataFrame({'IAKF_DN': iakf_down(P['index']['TAIEX_P'].values)}, index=P['dates'])
+    return A
+
+
+def build(adj='AF'):
+    """adj：AF 或 AF_C。兩種成交額（AMT20、AMT20V）都算。"""
+    t0 = time.time(); P = load_panel()
+    out = OUT / adj; out.mkdir(parents=True, exist_ok=True)
+    A = compute(P, adj, out); VALID = np.asarray(A['VALID'])
+    for f in A:
+        if f != 'market': A[f].flush()
+    A['market'].reset_index(names='date').to_parquet(out / 'market.parquet', index=False)
     info = dict(adj=adj, panel=P['info']['built'], tag=P['info']['tag'], seconds=round(time.time() - t0),
                 peak_mb=round(peak_mem_mb()), valid_cells=int(VALID.sum()))
     (out / 'info.json').write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding='utf-8')
