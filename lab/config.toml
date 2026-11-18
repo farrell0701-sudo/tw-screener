@@ -1,0 +1,13 @@
+# 新引擎設定。資料路徑相對於 repo 根目錄；可用環境變數 TWDATA 覆寫。
+[data]
+twdata = "../tw-data-v1.1"   # tw-data 固定在標籤 v1.1 的資料夾
+tag = "v1.1"                 # 建面板時檢查 git 標籤必須完全相符
+start = "2004-01-01"         # 2005 起評估，前一年作暖機
+classes = ["common"]         # 股池只用普通股
+
+[compat]
+# 相容模式偏誤 ②：此日之前的股利事件不還原（L-113）
+no_div_before = "2016-07-01"
+div_sources = ["dividend", "policy_formula"]
+# 相容模式偏誤 ①：此日（含）之後下市的股票整檔排除
+delist_from = "2016-01-01"

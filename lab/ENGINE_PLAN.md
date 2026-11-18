@@ -113,3 +113,10 @@ lab/
 ## 7. 步驟 0（2026-11-18）
 
 使用者對資料模式、驗收、DSR、停牌下市的決定已寫入登記簿 L-113。之後依第 5 節順序，從 `setup.sh`＋面板建置開始。
+
+## 8. 步驟 1 完成（2026-11-18）：面板
+
+- `lab/config.toml`（資料路徑、標籤、相容模式參數）、`lab/data/panel.py`（建置與 `load()`）、`lab/data/panel_report.py`。
+- 執行：`python lab/data/panel.py`（約 12 秒，峰值約 1.7 GB，快取 961 MB 在 lab/cache/panel）。
+- 結果見 `lab/data/PANEL_REPORT.md`：股數與 VERIFY 相同；還原因子重建誤差 1e-15；2016 年資料中斷判定為減資換發的正常停止交易。
+- 待登記：inactive_unexplained（358 檔）比照下市處理。
