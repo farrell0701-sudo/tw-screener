@@ -98,7 +98,7 @@ def evaluate(parity=1, names=None, fac_fn=None, ref=None):
                         if m in rf.index:
                             rv2 = rf.loc[m].to_numpy(float); rx = np.where(rj >= 0, rv2[np.clip(rj, 0, None)], np.nan)[jj]; ok = np.isfinite(rx)
                             if ok.sum() > 10: cF[rk].append(np.corrcoef(srank(xv[ok]), srank(rx[ok]))[0, 1])
-                    g = pd.qcut(srank(xv), ng, labels=False)
+                    g = pd.qcut(pd.Series(xv).rank(method='first').to_numpy(), ng, labels=False)   # 平手依順序（殖利率等有大量相同值）
                     top = set(jj[g == ng - 1])
                     if prev_top is not None and len(prev_top): keep.append(len(top & prev_top) / len(prev_top))
                     prev_top = top
