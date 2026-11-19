@@ -15,7 +15,7 @@ ERAS = (('2005–15', '2005-01-01', '2015-12-31'), ('2016–26', '2016-01-01', '
 HS = (5, 20, 60, 120)
 
 
-def rev_factors():
+def rev_factors(dates=None):
     d = pd.read_parquet(TWD / 'derived' / 'month_revenue.parquet')
     d = d[d.security_key.notna() & d.security_key.ne('')]
     d['m'] = d.period_end.dt.to_period('M')
@@ -39,7 +39,8 @@ def srank(a):
 PARITY = 1      # 1＝奇數（探索集）、0＝偶數（確認集）
 
 
-def evaluate(parity=1, names=None):
+def evaluate(parity=1, names=None, fac_fn=None, ref=None):
+    """fac_fn(dates)→{名稱: 以月份（取樣月−1）為索引的寬表}；ref：同格式的對照因子（報告截面相關）。"""
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     S = signals.compute('fix', P=P, F=F); dbg = S['_dbg']; U, pool, Tr = dbg['U'], dbg['pool'], dbg['Tr']; del S
     if Tr.shape[1] != N: full = np.full((T, N), np.nan); full[:, dbg['cols']] = Tr; Tr = full
@@ -53,7 +54,8 @@ def evaluate(parity=1, names=None):
     CX = np.cumsum(R - ew[:, None], axis=0)
     keys = P['meta']['security_key'].astype(str).to_numpy()
     odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == parity).to_numpy()
-    FAC = rev_factors()
+    FAC = (fac_fn or rev_factors)(dates)
+    REF = {k: (v, pd.Index(v.columns.astype(str)).get_indexer(keys)) for k, v in (ref or {}).items()}
     if names: FAC = {k: v for k, v in FAC.items() if k in names}
     # 取樣日：每月第一個 日 > 10 的交易日
     ds = pd.Series(dates, index=dates); samp = ds[ds.dt.day > 10].groupby(ds[ds.dt.day > 10].dt.to_period('M')).min()
@@ -74,7 +76,7 @@ def evaluate(parity=1, names=None):
         jmap = colix.get_indexer(keys)
         for layer, mask, ng in (('全市場', U, 10), ('強勢池', pool, 5)):
             for era, lo, hi in ERAS:
-                ics = {h: [] for h in HS}; rows = []; prev_top = None; keep = []; cov = []; cT = []; cR = []
+                ics = {h: [] for h in HS}; rows = []; prev_top = None; keep = []; cov = []; cT = []; cR = []; cF = {k: [] for k in REF}
                 for t in samp:
                     if not (pd.Timestamp(lo) <= dates[t] <= pd.Timestamp(hi)): continue
                     m = dates[t].to_period('M') - 1
@@ -92,6 +94,10 @@ def evaluate(parity=1, names=None):
                     for arr, lst in ((tv, cT), (rv, cR)):
                         ok = np.isfinite(arr)
                         if ok.sum() > 10: lst.append(np.corrcoef(srank(xv[ok]), srank(arr[ok]))[0, 1])
+                    for rk, (rf, rj) in REF.items():
+                        if m in rf.index:
+                            rv2 = rf.loc[m].to_numpy(float); rx = np.where(rj >= 0, rv2[np.clip(rj, 0, None)], np.nan)[jj]; ok = np.isfinite(rx)
+                            if ok.sum() > 10: cF[rk].append(np.corrcoef(srank(xv[ok]), srank(rx[ok]))[0, 1])
                     g = pd.qcut(srank(xv), ng, labels=False)
                     top = set(jj[g == ng - 1])
                     if prev_top is not None and len(prev_top): keep.append(len(top & prev_top) / len(prev_top))
@@ -105,7 +111,7 @@ def evaluate(parity=1, names=None):
                                          left=np.nanmean(e60[mm] <= q10), right=np.nanmean(e60[mm] >= q90)))
                 if not rows: continue
                 D = pd.DataFrame(rows)
-                L += [f'## {fn}｜{layer}｜{era}（期數 {D.t.nunique()}，覆蓋 {np.nanmean(cov):.0%}，與 T_ld 相關 {np.mean(cT):+.2f}、與 R20 相關 {np.mean(cR):+.2f}，頭組逐期保留 {np.mean(keep):.0%}）\n',
+                L += [f'## {fn}｜{layer}｜{era}（期數 {D.t.nunique()}，覆蓋 {np.nanmean(cov):.0%}，與 T_ld 相關 {np.mean(cT):+.2f}、與 R20 相關 {np.mean(cR):+.2f}{''.join(f'、與 {k} 相關 {np.mean(v):+.2f}' for k, v in cF.items() if v)}，頭組逐期保留 {np.mean(keep):.0%}）\n',
                       '| 期間 | ' + ' | '.join(f'{h} 日' for h in HS) + ' |', '|---|---|---|---|---|',
                       '| IC 平均（t） | ' + ' | '.join(f"{np.mean(ics[h]):+.3f}（{nw_t(ics[h], max(1, h // 21)):.1f}）" for h in HS) + ' |',
                       '| IC > 0 比例 | ' + ' | '.join(f"{np.mean(np.array(ics[h]) > 0):.0%}" for h in HS) + ' |', '',
