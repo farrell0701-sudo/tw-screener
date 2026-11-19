@@ -36,7 +36,10 @@ def srank(a):
     return pd.Series(a).rank().to_numpy()
 
 
-def main():
+PARITY = 1      # 1＝奇數（探索集）、0＝偶數（確認集）
+
+
+def evaluate(parity=1, names=None):
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     S = signals.compute('fix', P=P, F=F); dbg = S['_dbg']; U, pool, Tr = dbg['U'], dbg['pool'], dbg['Tr']; del S
     if Tr.shape[1] != N: full = np.full((T, N), np.nan); full[:, dbg['cols']] = Tr; Tr = full
@@ -49,8 +52,9 @@ def main():
     with np.errstate(all='ignore'): ew = np.nan_to_num(np.nanmean(np.where(Ush, R, np.nan), axis=1))
     CX = np.cumsum(R - ew[:, None], axis=0)
     keys = P['meta']['security_key'].astype(str).to_numpy()
-    odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == 1).to_numpy()
+    odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == parity).to_numpy()
     FAC = rev_factors()
+    if names: FAC = {k: v for k, v in FAC.items() if k in names}
     # 取樣日：每月第一個 日 > 10 的交易日
     ds = pd.Series(dates, index=dates); samp = ds[ds.dt.day > 10].groupby(ds[ds.dt.day > 10].dt.to_period('M')).min()
     samp = [dates.get_loc(d) for d in samp if d >= pd.Timestamp('2005-01-01') and dates.get_loc(d) + 120 < T]
@@ -112,8 +116,13 @@ def main():
                 hi_, lo_ = D[D.k == ng - 1].set_index('t'), D[D.k == 0].set_index('t')
                 sp20 = (hi_.e20 - lo_.e20).dropna(); sp60 = (hi_.e60 - lo_.e60).dropna()
                 L.append(f"| 高−低 | {sp20.mean():+.2%}（t {nw_t(sp20, 1):.1f}） | {sp60.mean():+.2%}（t {nw_t(sp60, 3):.1f}） | | {(hi_.up - lo_.up).mean():+.2%} | {(hi_.dn - lo_.dn).mean():+.2%} | | |\n")
-                summ.append((fn, layer, era, [np.mean(ics[h]) for h in HS], sp60.mean()))
+                summ.append((fn, layer, era, [np.mean(ics[h]) for h in HS], sp60.mean(), nw_t(sp60, 3)))
+    return L, summ
+
+
+def main():
+    L, summ = evaluate(PARITY)
     head = ['# 摘要（IC 5／20／60／120 日；高−低 60 日超額）\n', '| 因子 | 層 | 期間 | IC5 | IC20 | IC60 | IC120 | 高−低 60 日 |', '|---|---|---|---|---|---|---|---|']
-    for fn, la, era, ic, sp in summ:
+    for fn, la, era, ic, sp, _t in summ:
         head.append(f"| {fn} | {la} | {era} | " + ' | '.join(f'{v:+.3f}' for v in ic) + f" | {sp:+.2%} |")
     return dict(summary='\n'.join(head + [''] + L), headline='月營收因子評估完成', n_variants=0)
