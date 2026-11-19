@@ -39,7 +39,7 @@ def srank(a):
 PARITY = 1      # 1＝奇數（探索集）、0＝偶數（確認集）
 
 
-def evaluate(parity=1, names=None, fac_fn=None, ref=None):
+def evaluate(parity=1, names=None, fac_fn=None, ref=None, eras=None):
     """fac_fn(dates)→{名稱: 以月份（取樣月−1）為索引的寬表}；ref：同格式的對照因子（報告截面相關）。"""
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     S = signals.compute('fix', P=P, F=F); dbg = S['_dbg']; U, pool, Tr = dbg['U'], dbg['pool'], dbg['Tr']; del S
@@ -75,7 +75,7 @@ def evaluate(parity=1, names=None, fac_fn=None, ref=None):
         colix = pd.Index(Fm.columns.astype(str))
         jmap = colix.get_indexer(keys)
         for layer, mask, ng in (('全市場', U, 10), ('強勢池', pool, 5)):
-            for era, lo, hi in ERAS:
+            for era, lo, hi in (eras or ERAS):
                 ics = {h: [] for h in HS}; rows = []; prev_top = None; keep = []; cov = []; cT = []; cR = []; cF = {k: [] for k in REF}
                 for t in samp:
                     if not (pd.Timestamp(lo) <= dates[t] <= pd.Timestamp(hi)): continue
