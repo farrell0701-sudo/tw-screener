@@ -34,6 +34,7 @@ RULES = dict(
     x_dvs=None,                                # L-108P：(W, q)＝剔除強勢池內下檔波動占比最高的 q；None＝不剔
     x_crowd=None,                              # L-114：(W, q)＝剔除強勢池內投機擁擠（½ 週轉率 W 日＋½ 融資使用率，池內百分位）最高的 q；None＝不剔
     v_bearstop=None,   # L-115：(MA, 例外)＝空頭閘門（指數 < MA 日均線，例外＝True 時排除廣度爆發後 20 日）當日 V4.1 訊號作廢；None＝不作廢
+    v_bearw=None,      # M-145：n＝V4.1 空頭模式的「200 日線下」改為「週 EMAn 下彎」（最近已收盤週）；None＝不改
     x_sparse=None,     # L-117：(W, k)＝近 W 日 V4.1 訊號數（不含次日開盤漲停改買）≤ k 時 X1 不開新倉；None＝不設
     # V4.1
     v_ind=True,        # 產業過濾：所屬產業 T_ld 中位數排名前 50%
@@ -129,6 +130,10 @@ def compute(mode='compat', P=None, F=None, **sw):
     else:
         buy_ok = np.ones((T_, N_), bool)
     bear200 = pd.Series(below, index=dates)
+    if R['v_bearw']:
+        wend = pd.Series(dates, index=dates).groupby(dates.to_period('W-FRI')).max()
+        wc = ix.loc[wend.values]; we = wc.ewm(span=R['v_bearw'], adjust=False).mean(); wf = (we < we.shift(1)); wf.index = wend.values
+        bear200 = wf.reindex(dates, method='ffill').fillna(False).astype(bool)
     ixr = ix.pct_change(fill_method=None)
     mv = ixr.rolling(20).std(); mkt_vol_down = (mv < mv.shift(20)).values
     Cf = pd.DataFrame(Cn.astype(float)).ffill()                  # 參考實作 C.pct_change()（pandas 2 預設先向前填補）
