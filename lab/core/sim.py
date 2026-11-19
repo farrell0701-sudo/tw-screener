@@ -76,7 +76,7 @@ def _buyable(c, t, j):
     return True
 
 
-def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None):
+def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None):
     """kind：'X'（X1）或 'V'（V4.1）。回傳（日報酬 Series、交易紀錄 list、持股比例 Series）。"""
     rng = np.random.default_rng(seed); dates = c['dates']; T_ = c['T'] if end is None else end
     s0 = c['s0'] + off; Ov, Cf, CA = c['Ov'], c['Cf'], c['CA']
@@ -148,8 +148,11 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 elif vstop != 'none' and (c['MD'][t] or p['bear']) and cc < p['px'] * (1 - p.get('vd', 0.05)): sell[j] = '空頭5%停損'
                 elif t - p['t0'] + 1 >= p['hold']: sell[j] = '持有期滿'
         free = n - len(pos) + len(set(sell) & set(pos))
-        gate = (c['below'][t] and not (unlock is not None and unlock[t])) if kind == 'X' else c['OFF'][t]   # M-109：unlock 窗口內解除 X1 閘門
-        if free > 0 and not gate:
+        if kind == 'X':
+            g0 = c['below'][t] if gate is None else bool(gate[t])            # M-144：gate 可整條替換 X1 閘門
+            gate_ = g0 and not (unlock is not None and unlock[t])            # M-109：unlock 窗口內解除 X1 閘門
+        else: gate_ = c['OFF'][t]
+        if free > 0 and not gate_:
             cnd = np.where(~np.isnan(RK[t]))[0]
             if ban is not None: cnd = cnd[~np.isin(cnd, ban)]
             if drop: cnd = cnd[rng.random(len(cnd)) >= drop]
@@ -160,8 +163,8 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
     return (pd.Series(eq, index=dates).dropna().pct_change().fillna(0), tr, pd.Series(ex, index=dates).dropna())
 
 
-def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None):
-    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock)
+def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None):
+    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate)
 
 
 def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None):
