@@ -76,7 +76,7 @@ def _buyable(c, t, j):
     return True
 
 
-def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None):
+def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None):
     """kind：'X'（X1）或 'V'（V4.1）。回傳（日報酬 Series、交易紀錄 list、持股比例 Series）。"""
     rng = np.random.default_rng(seed); dates = c['dates']; T_ = c['T'] if end is None else end
     s0 = c['s0'] + off; Ov, Cf, CA = c['Ov'], c['Cf'], c['CA']
@@ -113,6 +113,9 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                     d = c['ATRP'][t - 1, j] * 4; p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), 0.15); p['hi'] = px
                 else:
                     p['bear'] = bool(c['MD'][t - 1]); p['hold'] = int(rng.integers(18, 23))
+                    if isinstance(vstop, tuple):                         # L-119：空頭停損寬度依 ATR（k × ATR%，限 lo–hi）
+                        dv = c['ATRP'][t - 1, j] * vstop[0]; p['vd'] = vstop[1] if not np.isfinite(dv) else min(max(dv, vstop[1]), vstop[2])
+                    else: p['vd'] = 0.05
                 pos[j] = p; cash -= own
         sell, buy = keep, []
         if fix:                                                       # 最後有效日：下市出清（A）或凍結（B）
@@ -142,7 +145,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
             else:
                 if c['OFF'][t] and t - p['t0'] >= 1: sell[j] = 'IAKF'
-                elif (c['MD'][t] or p['bear']) and cc < p['px'] * 0.95: sell[j] = '空頭5%停損'
+                elif vstop != 'none' and (c['MD'][t] or p['bear']) and cc < p['px'] * (1 - p.get('vd', 0.05)): sell[j] = '空頭5%停損'
                 elif t - p['t0'] + 1 >= p['hold']: sell[j] = '持有期滿'
         free = n - len(pos) + len(set(sell) & set(pos))
         gate = (c['below'][t] and not (unlock is not None and unlock[t])) if kind == 'X' else c['OFF'][t]   # M-109：unlock 窗口內解除 X1 閘門
@@ -161,8 +164,8 @@ def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=Non
     return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock)
 
 
-def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None):
-    return _run(c, 'V', off, seed, n, drop, 250, ban, delist, end)
+def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None):
+    return _run(c, 'V', off, seed, n, drop, 250, ban, delist, end, None, vstop)
 
 
 def mix(a, b, wa=0.6):
