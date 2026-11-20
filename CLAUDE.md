@@ -42,7 +42,8 @@
 新引擎已建好（2026-11-19），驗收結果見 L-113、L-113B、L-113C。
 
 1. **資料**：tw-data 標籤 `v1.1`（`../tw-data-v1.1`，建面板時檢查標籤）。一律固定使用標籤，不用 main。讀取規則見 tw-data 的 `CONTRACT.md`。tw-data 的其他分支是舊資料，只能比對，不可修改。
-2. **引擎**：`lab/data/panel.py` → `lab/core/{feat,signals,sim,evalu,run}.py`；實驗腳本放 `lab/exp/<編號>.py`，用 `python lab/core/run.py <編號>` 執行（未登記拒絕執行，結果寫入 `lab/results/`，自動提交）。測試：`lab/core/test_*.py`。
+2. **沒有 pyarrow 的沙箱**：執行時加 `PYTHONPATH=lab/tools/pqshim`（見該資料夾 README）。
+2a. **引擎**：`lab/data/panel.py` → `lab/core/{feat,signals,sim,evalu,run}.py`；實驗腳本放 `lab/exp/<編號>.py`，用 `python lab/core/run.py <編號>` 執行（未登記拒絕執行，結果寫入 `lab/results/`，自動提交）。測試：`lab/core/test_*.py`。
 3. **模式**：修正模式 `fix`（新基準候選）、相容模式 `compat`（只供比對；其偏誤 ② 設定有誤，見 L-113B，不再引用其 2005–15 數字）。所有決定見 L-113 及其補充。
 4. **驗收結論**：引擎＝參考實作（逐格、逐筆一致；前視測試通過）。舊定版數字重現不了，原因是資料：2016–26 存活者偏誤、2005–15 興櫃價格與其他資料差異（L-113B、L-113C）。舊資料跑新引擎可重現舊 Calmar（±0.10）。
 5. **新基準已採用**（2026-11-19，見第 4 節）；下市維持 A。
