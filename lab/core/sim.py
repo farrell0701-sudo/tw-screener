@@ -82,7 +82,7 @@ def _size(path):
     return _SZ[path]
 
 
-def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None):
+def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None, xstop=None):
     """kind：'X'（X1）或 'V'（V4.1）。回傳（日報酬 Series、交易紀錄 list、持股比例 Series）。"""
     rng = np.random.default_rng(seed); dates = c['dates']; T_ = c['T'] if end is None else end
     s0 = c['s0'] + off; Ov, Cf, CA = c['Ov'], c['Cf'], c['CA']
@@ -120,6 +120,8 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 p = dict(sh=own * (1 - FEE) / px, t0=t, px=px, own=own, E=E, st=False)
                 if kind == 'X':
                     d = c['ATRP'][t - 1, j] * 4; p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), 0.15); p['hi'] = px
+                    if xstop is not None and (xstop[2] is None or bool(_size(xstop[2])[t - 1, j])):   # L-125：替代出場（'hard'／'trail'，寬度 w）
+                        p['xm'] = xstop[0]; p['d'] = xstop[1]
                 else:
                     p['bear'] = bool(c['MD'][t - 1]); p['hold'] = int(rng.integers(18, 23))
                     if isinstance(vstop, tuple):                         # L-119：空頭停損寬度依 ATR（k × ATR%，限 lo–hi）
@@ -149,6 +151,14 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
             if np.isnan(cc): continue
             if kind == 'X':
                 p['hi'] = max(p['hi'], cc)
+                if p.get('xm') == 'hard':
+                    if cc < p['px'] * (1 - p['d']): sell[j] = '硬停損'
+                    elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
+                    continue
+                if p.get('xm') == 'trail':
+                    if cc < p['hi'] * (1 - p['d']): sell[j] = '移動停損'
+                    elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
+                    continue
                 if cc < p['hi'] * (1 - p['d']): sell[j] = '移動停損'
                 elif p['hi'] >= p['px'] * 1.06 and cc < p['px'] * 1.005: sell[j] = '保本'
                 elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
@@ -172,8 +182,8 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
     return (pd.Series(eq, index=dates).dropna().pct_change().fillna(0), tr, pd.Series(ex, index=dates).dropna())
 
 
-def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None):
-    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate)
+def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None, xstop=None):
+    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate, None, xstop)
 
 
 def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None, size=None):
