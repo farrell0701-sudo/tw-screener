@@ -94,15 +94,18 @@ def compute(mode='compat', P=None, F=None, **sw):
     elif R['x_rank'] == 'dtld': SCX = np.nan_to_num(prk(dT, pool))
     elif R['x_rank'] == 'random': SCX = np.random.default_rng(0).random((T_, N_))
     else: raise ValueError(R['x_rank'])
+    revok = True
     if R['x_rev']:
         kind, nt, key = R['x_rev']
         ranks = [prk(g(a), pool) for a in EXTRA[key]]
         with np.errstate(all='ignore'), warnings.catch_warnings():
             warnings.simplefilter('ignore', RuntimeWarning)
             rv = np.nanmean(np.stack(ranks), axis=0) if len(ranks) > 1 else ranks[0]
-        rv = np.where(np.isfinite(rv), rv, 0.5)                   # 缺值＝中性
+        hasr = np.isfinite(rv); rv = np.where(hasr, rv, 0.5)      # 缺值＝中性
         if kind == 'tier': SCX = np.clip(np.ceil(rv * nt), 1, nt) + 0.999 * SCX
         elif kind == 'ew': SCX = 0.5 * rv + 0.5 * SCX
+        elif kind == 'filter': revok = ~(hasr & (rv < nt))         # L-124：剔除 r < q（缺值保留）
+        elif kind == 'prio': SCX = (hasr & (rv >= nt)).astype(float) + 0.999 * SCX   # L-124：r ≥ q 者先排
         else: raise ValueError(kind)
     dvsf = np.zeros((T_, N_), bool)
     if R['x_dvs']:
@@ -115,7 +118,7 @@ def compute(mode='compat', P=None, F=None, **sw):
         Wc, qc = R['x_crowd']; TU, MU = crowd(P, F, Wc); TU, MU = g(TU), g(MU)
         sc = 0.5 * prk(TU, pool) + 0.5 * prk(MU, pool)          # 任一缺值 → 空值（不計分、不剔除）
         crowdf = np.nan_to_num(prk(sc, pool & np.isfinite(sc))) > 1 - qc
-    candX = pool & ~(hot if R['x_hot'] else False) & ~(steep if R['x_steep'] else False) & ~dvsf & ~crowdf
+    candX = pool & ~(hot if R['x_hot'] else False) & ~(steep if R['x_steep'] else False) & ~dvsf & ~crowdf & revok
     RKX = rank_desc(SCX, candX)
     below = (ix < ix.rolling(R['ma']).mean()).values
 
