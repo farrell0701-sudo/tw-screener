@@ -76,7 +76,13 @@ def _buyable(c, t, j):
     return True
 
 
-def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None):
+_SZ = {}
+def _size(path):
+    if path not in _SZ: _SZ[path] = np.load(path, mmap_mode='r')
+    return _SZ[path]
+
+
+def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None):
     """kind：'X'（X1）或 'V'（V4.1）。回傳（日報酬 Series、交易紀錄 list、持股比例 Series）。"""
     rng = np.random.default_rng(seed); dates = c['dates']; T_ = c['T'] if end is None else end
     s0 = c['s0'] + off; Ov, Cf, CA = c['Ov'], c['Cf'], c['CA']
@@ -106,7 +112,10 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
             for j in buy:
                 if j in pos or len(pos) >= n: continue
                 if not _buyable(c, t, j): continue
-                px = Ov[t, j] * (1 + SLIP); own = min(E / n, cash)
+                sz = 1.0
+                if size is not None and kind == 'V':                     # L-122：V4.1 部位大小倍數（訊號日 t−1）
+                    sz = float(_size(size)[t - 1, j]); sz = 1.0 if not np.isfinite(sz) else sz
+                px = Ov[t, j] * (1 + SLIP); own = min(E / n * sz, cash)
                 if own <= 0: break
                 p = dict(sh=own * (1 - FEE) / px, t0=t, px=px, own=own, E=E, st=False)
                 if kind == 'X':
@@ -167,8 +176,8 @@ def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=Non
     return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate)
 
 
-def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None):
-    return _run(c, 'V', off, seed, n, drop, 250, ban, delist, end, None, vstop)
+def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None, size=None):
+    return _run(c, 'V', off, seed, n, drop, 250, ban, delist, end, None, vstop, None, size)
 
 
 def mix(a, b, wa=0.6):
