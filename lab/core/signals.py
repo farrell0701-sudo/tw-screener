@@ -18,6 +18,7 @@ from panel import load as load_panel, peak_mem_mb
 from feat import load_feat
 
 OUT = LAB / 'cache' / 'sig'
+EXTRA = {}     # L-123：外部日資料（T × 全部股票），以鍵名從規則引用，避免大陣列寫入 info.json
 MODES = {
     'compat': dict(bias1=True, bias2=True, bias3=True, amt='AMT20', ind='pk'),
     'fix':    dict(bias1=False, bias2=False, bias3=False, amt='AMT20V', ind='master'),
@@ -31,6 +32,7 @@ RULES = dict(
     x_hot=True, hot_q=0.80,                    # 剔過熱：20 日漲幅池內前 20%
     x_steep=True, steep_up=0.05, steep_q=0.80, # 剔最陡：S60 ≥ 5% 者中前 20%
     x_rank='both',                             # both＝½T_ld＋½ΔT_ld10；tld；dtld；random
+    x_rev=None,                                # L-123：(kind, n, key)＝營收排序；kind 'tier'＝營收池內百分位分 n 層先排、同層依 SCX；'ew'＝½營收＋½SCX；key＝EXTRA 中的日資料清單（多個則池內百分位平均）；None＝不用
     x_dvs=None,                                # L-108P：(W, q)＝剔除強勢池內下檔波動占比最高的 q；None＝不剔
     x_crowd=None,                              # L-114：(W, q)＝剔除強勢池內投機擁擠（½ 週轉率 W 日＋½ 融資使用率，池內百分位）最高的 q；None＝不剔
     v_bearstop=None,   # L-115：(MA, 例外)＝空頭閘門（指數 < MA 日均線，例外＝True 時排除廣度爆發後 20 日）當日 V4.1 訊號作廢；None＝不作廢
@@ -92,6 +94,16 @@ def compute(mode='compat', P=None, F=None, **sw):
     elif R['x_rank'] == 'dtld': SCX = np.nan_to_num(prk(dT, pool))
     elif R['x_rank'] == 'random': SCX = np.random.default_rng(0).random((T_, N_))
     else: raise ValueError(R['x_rank'])
+    if R['x_rev']:
+        kind, nt, key = R['x_rev']
+        ranks = [prk(g(a), pool) for a in EXTRA[key]]
+        with np.errstate(all='ignore'), warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            rv = np.nanmean(np.stack(ranks), axis=0) if len(ranks) > 1 else ranks[0]
+        rv = np.where(np.isfinite(rv), rv, 0.5)                   # 缺值＝中性
+        if kind == 'tier': SCX = np.clip(np.ceil(rv * nt), 1, nt) + 0.999 * SCX
+        elif kind == 'ew': SCX = 0.5 * rv + 0.5 * SCX
+        else: raise ValueError(kind)
     dvsf = np.zeros((T_, N_), bool)
     if R['x_dvs']:
         from feat import dvs_own
