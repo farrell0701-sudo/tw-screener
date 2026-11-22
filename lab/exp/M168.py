@@ -11,6 +11,8 @@ from M107 import nw_t
 from M122 import fin_factors
 import M165
 
+PARITY = 1   # M-169 改成 0（偶數代碼確認集）
+LAST_D = None
 CPS = (20, 40, 60); FH = 60; STOP = 0.85
 VARS = {'V1 次數（ΔT_ld10<0 天數占比）': +1, 'V2 幅度（T_ld 第c日−進場日）': -1, 'V3 自高點回落': +1, 'V4 第一次轉負時間': -1}   # +1：值越高越弱
 
@@ -18,7 +20,7 @@ VARS = {'V1 次數（ΔT_ld10<0 天數占比）': +1, 'V2 幅度（T_ld 第c日�
 def main():
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     keys = P['meta']['security_key'].astype(str).to_numpy()
-    odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == 1).to_numpy()
+    odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == PARITY).to_numpy()
     S = signals.compute('fix', P=P, F=F); dbg = S['_dbg']; U, pool, Tr = dbg['U'], dbg['pool'], dbg['Tr']; del S
     if Tr.shape[1] != N: full = np.full((T, N), np.nan); full[:, dbg['cols']] = Tr; Tr = full
     dT = Tr - np.vstack([np.full((10, N), np.nan), Tr[:-10]])
@@ -64,7 +66,8 @@ def main():
                                 'dd': np.nanmin(LA[t + c + 1:t + c + FH + 1, j]) / Cf[t + c, j] - 1,
                                 'st60': float(kst <= c + FH), 'rem': CX[t + 120, j] - CX[t + c, j] if c < 120 else np.nan})
                 rows.append(rec)
-    D = pd.DataFrame(rows); D['stopped'] = D.stopped.astype(bool); D['st60'] = D.st60.astype(float)
+    global LAST_D
+    D = pd.DataFrame(rows); D['stopped'] = D.stopped.astype(bool); D['st60'] = D.st60.astype(float); LAST_D = D
     L = ['# M-168 結果：營收池訊號品質——進場後 ΔT_ld10 轉弱（奇數代碼）\n',
          f'訊號＝池外營收池剔除 Q5 最低 20%（剔除 {nq} 檔次，全部代碼）；奇數代碼訊號 {nsig} 筆。超額＝第 c 日收盤到 c＋60 日，扣可交易池等權。\n',
          '| 檢查點 | 期間 | 訊號數 | 已停損（剔除） | 後 60 日超額 | 左尾門檻／右尾門檻 | 剩餘到第 120 日超額 |', '|---|---|---|---|---|---|---|']
