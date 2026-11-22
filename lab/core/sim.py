@@ -90,7 +90,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
     cash = 1.0; pos = {}; sell, buy = {}, []; eq = np.full(c['T'], np.nan); ex = np.full(c['T'], np.nan); tr = []
     fix = c['fix']; bmode = delist[0] if isinstance(delist, tuple) else delist; disc = delist[1] if isinstance(delist, tuple) else 0.0
     xo = xopt or {}                                                   # L-133：X 帳戶選項（預設全部不啟用）
-    x_off = bool(xo.get('off')); x_dcap = float(xo.get('dcap', 0.15)); x_inv = xo.get('invatr'); x_slots = xo.get('slots')
+    x_off = bool(xo.get('off')); x_dcap = float(xo.get('dcap', 0.15)); x_inv = xo.get('invatr'); x_slots = xo.get('slots'); x_scale = xo.get('scale')
     if x_inv is not None:
         with np.errstate(all='ignore'): _med = np.nanmedian(np.where(np.asarray(c['ATRP']) > 0, c['ATRP'], np.nan), axis=1)
 
@@ -106,6 +106,21 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
         if fix:                                                       # 凍結部位（B）在下市日回收
             for j in [j for j, p in pos.items() if p.get('dead') and t >= p['rel']]:
                 p = pos.pop(j); cash += close(j, p, t, p['val'], '下市回收')   # 回收不計滑價，只扣手續費與稅
+        if kind == 'X' and x_scale is not None and t > s0 and x_scale[t] != x_scale[t - 1]:   # L-134：曝險倍數改變→各部位等比例調整（權重不變）
+            mt, mp = float(x_scale[t]), float(x_scale[t - 1])
+            for j in list(pos):
+                p = pos[j]
+                if p.get('dead'): continue
+                if mt <= 0:
+                    if _sellable(c, t, j): pos.pop(j); cash += close(j, p, t, _sellpx(c, t, j), '空頭清倉'); sell.pop(j, None)
+                    continue
+                if mp <= 0: continue
+                f = mt / mp
+                if f < 1 and _sellable(c, t, j):
+                    q = p['sh'] * (1 - f); cash += q * _sellpx(c, t, j) * (1 - FEE - TAX); p['sh'] -= q; p['own'] *= f
+                elif f > 1 and _buyable(c, t, j):
+                    q = p['sh'] * (f - 1); bp = Ov[t, j] * (1 + SLIP); cost = min(q * bp / (1 - FEE), cash)
+                    if cost > 0: p['sh'] += cost * (1 - FEE) / bp; p['own'] += cost; cash -= cost
         keep = {}
         for j, why in sell.items():
             if j not in pos or pos[j].get('dead'): continue
@@ -121,7 +136,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                     sz = float(_size(size)[t - 1, j]); sz = 1.0 if not np.isfinite(sz) else sz
                 if x_inv is not None and kind == 'X':                    # L-133：反 ATR 部位（全市場 ATR% 中位數 ÷ 個股 ATR%，限 lo–hi）
                     a_ = float(c['ATRP'][t - 1, j]); sz = 1.0 if not (np.isfinite(a_) and a_ > 0 and np.isfinite(_med[t - 1])) else min(max(_med[t - 1] / a_, x_inv[0]), x_inv[1])
-                px = Ov[t, j] * (1 + SLIP); own = min(E / n * sz, cash)
+                px = Ov[t, j] * (1 + SLIP); own = min(E / n * sz * (float(x_scale[t]) if (kind == 'X' and x_scale is not None) else 1.0), cash)
                 if own <= 0: break
                 p = dict(sh=own * (1 - FEE) / px, t0=t, px=px, own=own, E=E, st=False)
                 if kind == 'X':
@@ -185,6 +200,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
             g0 = c['below'][t] if gate is None else bool(gate[t])            # M-144：gate 可整條替換 X1 閘門
             gate_ = g0 and not (unlock is not None and unlock[t])            # M-109：unlock 窗口內解除 X1 閘門
             if x_off and c['OFF'][t]: gate_ = True                          # L-133：IAKF 期間 X 不開倉
+            if x_scale is not None and t + 1 < c['T'] and float(x_scale[t + 1]) <= 0: gate_ = True   # L-134：明日曝險為 0 時不開倉
         else: gate_ = c['OFF'][t]
         if free > 0 and not gate_:
             cnd = np.where(~np.isnan(RK[t]))[0]
