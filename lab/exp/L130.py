@@ -71,7 +71,7 @@ def main():
                 if sd + 1 < T: out = out[VALID[sd + 1, out] & np.isfinite(OA[sd + 1, out]) & (OA[sd + 1, out] > 0)]
         CACHE[sd] = out; return out
 
-    def run(xm, vc, gn, be, reopen, thr):
+    def run(xm, vc, gn, be, reopen, cthr):
         cash = 1.0; pos = {}; eq = np.full(T, np.nan); trades = []; nh = np.zeros(T); cs = np.zeros(T); gd = np.zeros(T, bool); NTRIG = {}
         t_start = min(SIG)
         for t in range(t_start, T):
@@ -79,7 +79,7 @@ def main():
             trig = None
             if t in SIG and not neg: trig = ('取樣日', SIG[t][0], SIG[t][1])
             elif not neg and reopen and gn and t >= 2 and GATE[gn][t - 2]: trig = ('轉正', t - 1, cur(t - 1))
-            elif not neg and thr is not None and np.isfinite(eq[t - 1]) and eq[t - 1] > 0 and cash / eq[t - 1] >= thr: trig = ('現金門檻', t - 1, cur(t - 1))
+            elif not neg and cthr is not None and np.isfinite(eq[t - 1]) and eq[t - 1] > 0 and cash / eq[t - 1] >= cthr: trig = ('現金門檻', t - 1, cur(t - 1))
             if trig is not None:                                 # 開盤買進（閘門用前一日收盤狀態）
                 kind_, ts, s = trig; s = [j for j in s if j not in pos]
                 if s and cash > 1e-9: NTRIG[kind_] = NTRIG.get(kind_, 0) + 1
