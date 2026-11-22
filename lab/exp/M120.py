@@ -39,8 +39,10 @@ def srank(a):
 PARITY = 1      # 1＝奇數（探索集）、0＝偶數（確認集）
 
 
-def evaluate(parity=1, names=None, fac_fn=None, ref=None, eras=None):
-    """fac_fn(dates)→{名稱: 以月份（取樣月−1）為索引的寬表}；ref：同格式的對照因子（報告截面相關）。"""
+def evaluate(parity=1, names=None, fac_fn=None, ref=None, eras=None, layers=None, detail=False):
+    """fac_fn(dates)→{名稱: 以月份（取樣月−1）為索引的寬表}；ref：同格式的對照因子（報告截面相關）。
+    layers(U, pool, dates, keys)→[(層名, T×N 布林遮罩, 組數)]（M-165 起；預設＝全市場十組、強勢池五組）。
+    detail=True 時另回傳 {(因子, 層, 期間): 各組統計 DataFrame}。"""
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     S = signals.compute('fix', P=P, F=F); dbg = S['_dbg']; U, pool, Tr = dbg['U'], dbg['pool'], dbg['Tr']; del S
     if Tr.shape[1] != N: full = np.full((T, N), np.nan); full[:, dbg['cols']] = Tr; Tr = full
@@ -69,12 +71,13 @@ def evaluate(parity=1, names=None, fac_fn=None, ref=None, eras=None):
         fwd[t] = (ex, up, dn, a60)
     L = ['# M-120 結果：月營收因子（M-119 標準；奇數代碼；F 計數 5）\n',
          '取樣：每月 10 日後第一個交易日收盤；超額＝扣可交易池等權；最高漲幅／最大跌幅與 60 日絕對報酬皆扣同期同層中位數。\n']
-    summ = []
+    summ = []; G = {}
+    LAYERS = layers(U, pool, dates, keys) if layers else (('全市場', U, 10), ('強勢池', pool, 5))
     for fn, Fm in FAC.items():
         L.append(f'# {fn}\n')
         colix = pd.Index(Fm.columns.astype(str))
         jmap = colix.get_indexer(keys)
-        for layer, mask, ng in (('全市場', U, 10), ('強勢池', pool, 5)):
+        for layer, mask, ng in LAYERS:
             for era, lo, hi in (eras or ERAS):
                 ics = {h: [] for h in HS}; rows = []; prev_top = None; keep = []; cov = []; cT = []; cR = []; cF = {k: [] for k in REF}
                 for t in samp:
@@ -123,7 +126,8 @@ def evaluate(parity=1, names=None, fac_fn=None, ref=None, eras=None):
                 sp20 = (hi_.e20 - lo_.e20).dropna(); sp60 = (hi_.e60 - lo_.e60).dropna()
                 L.append(f"| 高−低 | {sp20.mean():+.2%}（t {nw_t(sp20, 1):.1f}） | {sp60.mean():+.2%}（t {nw_t(sp60, 3):.1f}） | | {(hi_.up - lo_.up).mean():+.2%} | {(hi_.dn - lo_.dn).mean():+.2%} | | |\n")
                 summ.append((fn, layer, era, [np.mean(ics[h]) for h in HS], sp60.mean(), nw_t(sp60, 3)))
-    return L, summ
+                G[(fn, layer, era)] = D.groupby('k')[['e20', 'e60', 'a60', 'up', 'dn', 'left', 'right']].mean().assign(ic60=np.mean(ics[60]), ic120=np.mean(ics[120]), sp=sp60.mean(), t=nw_t(sp60, 3), n=D.t.nunique())
+    return (L, summ, G) if detail else (L, summ)
 
 
 def main():
