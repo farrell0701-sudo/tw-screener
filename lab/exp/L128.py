@@ -80,6 +80,7 @@ def main():
                         if new < p['rc'] * (1 - p['rd']) - 1e-12: p['mv'] = True
                         p['rc'], p['rd'] = c, nd
                     if c < p['rc'] * (1 - p['rd']): sell[j] = '新高K棒ATR停損'
+                    elif age >= HMAX: sell[j] = '120日到期'
                 elif age >= HMAX: sell[j] = '120日到期'
             if vc:                                              # V2：訊號日＋vc 的收盤
                 coh = {}
