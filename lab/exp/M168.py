@@ -62,9 +62,9 @@ def main():
                                 'V4 第一次轉負時間': (neg[0] + 1) if len(neg) else c + 1,
                                 'y': CX[t + c + FH, j] - CX[t + c, j],
                                 'dd': np.nanmin(LA[t + c + 1:t + c + FH + 1, j]) / Cf[t + c, j] - 1,
-                                'st60': kst <= c + FH, 'rem': CX[t + 120, j] - CX[t + c, j] if c < 120 else np.nan})
+                                'st60': float(kst <= c + FH), 'rem': CX[t + 120, j] - CX[t + c, j] if c < 120 else np.nan})
                 rows.append(rec)
-    D = pd.DataFrame(rows)
+    D = pd.DataFrame(rows); D['stopped'] = D.stopped.astype(bool); D['st60'] = D.st60.astype(float)
     L = ['# M-168 結果：營收池訊號品質——進場後 ΔT_ld10 轉弱（奇數代碼）\n',
          f'訊號＝池外營收池剔除 Q5 最低 20%（剔除 {nq} 檔次，全部代碼）；奇數代碼訊號 {nsig} 筆。超額＝第 c 日收盤到 c＋60 日，扣可交易池等權。\n',
          '| 檢查點 | 期間 | 訊號數 | 已停損（剔除） | 後 60 日超額 | 左尾門檻／右尾門檻 | 剩餘到第 120 日超額 |', '|---|---|---|---|---|---|---|']
