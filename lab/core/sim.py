@@ -82,13 +82,17 @@ def _size(path):
     return _SZ[path]
 
 
-def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None, xstop=None):
+def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None, xstop=None, xopt=None):
     """kind：'X'（X1）或 'V'（V4.1）。回傳（日報酬 Series、交易紀錄 list、持股比例 Series）。"""
     rng = np.random.default_rng(seed); dates = c['dates']; T_ = c['T'] if end is None else end
     s0 = c['s0'] + off; Ov, Cf, CA = c['Ov'], c['Cf'], c['CA']
     RK = c['RKX'] if kind == 'X' else c['RKV']
     cash = 1.0; pos = {}; sell, buy = {}, []; eq = np.full(c['T'], np.nan); ex = np.full(c['T'], np.nan); tr = []
     fix = c['fix']; bmode = delist[0] if isinstance(delist, tuple) else delist; disc = delist[1] if isinstance(delist, tuple) else 0.0
+    xo = xopt or {}                                                   # L-133：X 帳戶選項（預設全部不啟用）
+    x_off = bool(xo.get('off')); x_dcap = float(xo.get('dcap', 0.15)); x_inv = xo.get('invatr'); x_slots = xo.get('slots')
+    if x_inv is not None:
+        with np.errstate(all='ignore'): _med = np.nanmedian(np.where(np.asarray(c['ATRP']) > 0, c['ATRP'], np.nan), axis=1)
 
     def close(j, p, t, px, why):
         cash_in = p['sh'] * px * (1 - FEE - TAX)
@@ -115,11 +119,13 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 sz = 1.0
                 if size is not None and kind == 'V':                     # L-122：V4.1 部位大小倍數（訊號日 t−1）
                     sz = float(_size(size)[t - 1, j]); sz = 1.0 if not np.isfinite(sz) else sz
+                if x_inv is not None and kind == 'X':                    # L-133：反 ATR 部位（全市場 ATR% 中位數 ÷ 個股 ATR%，限 lo–hi）
+                    a_ = float(c['ATRP'][t - 1, j]); sz = 1.0 if not (np.isfinite(a_) and a_ > 0 and np.isfinite(_med[t - 1])) else min(max(_med[t - 1] / a_, x_inv[0]), x_inv[1])
                 px = Ov[t, j] * (1 + SLIP); own = min(E / n * sz, cash)
                 if own <= 0: break
                 p = dict(sh=own * (1 - FEE) / px, t0=t, px=px, own=own, E=E, st=False)
                 if kind == 'X':
-                    d = c['ATRP'][t - 1, j] * 4; p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), 0.15); p['hi'] = px
+                    d = c['ATRP'][t - 1, j] * 4; p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), x_dcap); p['hi'] = px
                     if xstop is not None and (xstop[2] is None or bool(_size(xstop[2])[t - 1, j])):   # L-125：替代出場（'hard'／'trail'，寬度 w）
                         p['xm'] = xstop[0]; p['d'] = xstop[1]
                 else:
@@ -151,6 +157,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
             if np.isnan(cc): continue
             if kind == 'X':
                 p['hi'] = max(p['hi'], cc)
+                if x_off and c['OFF'][t] and t - p['t0'] >= 1: sell[j] = 'IAKF'; continue
                 if p.get('xm') == 'hard':
                     if cc < p['px'] * (1 - p['d']): sell[j] = '硬停損'
                     elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
@@ -166,10 +173,18 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 if c['OFF'][t] and t - p['t0'] >= 1: sell[j] = 'IAKF'
                 elif vstop != 'none' and (c['MD'][t] or p['bear']) and cc < p['px'] * (1 - p.get('vd', 0.05)): sell[j] = '空頭5%停損'
                 elif t - p['t0'] + 1 >= p['hold']: sell[j] = '持有期滿'
-        free = n - len(pos) + len(set(sell) & set(pos))
+        n_t = n
+        if kind == 'X' and x_slots is not None:                       # L-133：空頭時可持有檔數上限，超過者依進場以來報酬由低到高減碼
+            n_t = min(n, int(x_slots[t]))
+            live = [j for j in pos if j not in sell and not pos[j].get('dead')]
+            if len(live) > n_t:
+                rr = sorted(live, key=lambda j: (CA[t, j] if np.isfinite(CA[t, j]) else 0) / pos[j]['px'])
+                for j in rr[:len(live) - n_t]: sell[j] = '空頭減碼'
+        free = n_t - len(pos) + len(set(sell) & set(pos))
         if kind == 'X':
             g0 = c['below'][t] if gate is None else bool(gate[t])            # M-144：gate 可整條替換 X1 閘門
             gate_ = g0 and not (unlock is not None and unlock[t])            # M-109：unlock 窗口內解除 X1 閘門
+            if x_off and c['OFF'][t]: gate_ = True                          # L-133：IAKF 期間 X 不開倉
         else: gate_ = c['OFF'][t]
         if free > 0 and not gate_:
             cnd = np.where(~np.isnan(RK[t]))[0]
@@ -182,8 +197,8 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
     return (pd.Series(eq, index=dates).dropna().pct_change().fillna(0), tr, pd.Series(ex, index=dates).dropna())
 
 
-def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None, xstop=None):
-    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate, None, xstop)
+def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None, xstop=None, xopt=None):
+    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate, None, xstop, xopt)
 
 
 def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None, size=None):
