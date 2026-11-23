@@ -50,6 +50,8 @@ def main():
             rows.append((era, grp[j], mct[j], att[j], ind[j], e60[j], q10, q90))
     D = pd.DataFrame(rows, columns=['era', 'pool', 'mc', 'atr', 'ind', 'e60', 'q10', 'q90'])
     D['L'] = D.e60 <= D.q10; D['Rt'] = D.e60 >= D.q90
+    import os
+    if os.environ.get('M185_DUMP'): D.to_parquet(os.environ['M185_DUMP'])
     top = D[D.era == '2016–24/11'].ind.value_counts().head(10).index
     D['indg'] = np.where(D.ind.isin(top), D.ind, '前十以外')
     L = ['# M-185 結果：依市值、ATR%、產業細分的報酬集中（奇數代碼；60 日超額；2005–15｜2016–24/11）\n']
