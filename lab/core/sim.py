@@ -90,7 +90,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
     cash = 1.0; pos = {}; sell, buy = {}, []; eq = np.full(c['T'], np.nan); ex = np.full(c['T'], np.nan); tr = []
     fix = c['fix']; bmode = delist[0] if isinstance(delist, tuple) else delist; disc = delist[1] if isinstance(delist, tuple) else 0.0
     xo = xopt or {}                                                   # L-133：X 帳戶選項（預設全部不啟用）
-    x_off = bool(xo.get('off')); x_dcap = float(xo.get('dcap', 0.15)); x_inv = xo.get('invatr'); x_slots = xo.get('slots'); x_scale = xo.get('scale'); x_esc = xo.get('escale')
+    x_off = bool(xo.get('off')); x_dcap = float(xo.get('dcap', 0.15)); x_inv = xo.get('invatr'); x_slots = xo.get('slots'); x_scale = xo.get('scale'); x_esc = xo.get('escale'); x_top = bool(xo.get('topup')); x_units = bool(xo.get('units'))
     if x_inv is not None:
         with np.errstate(all='ignore'): _med = np.nanmedian(np.where(np.asarray(c['ATRP']) > 0, c['ATRP'], np.nan), axis=1)
 
@@ -126,10 +126,22 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
             if j not in pos or pos[j].get('dead'): continue
             if not _sellable(c, t, j): keep[j] = why; continue
             p = pos.pop(j); cash += close(j, p, t, _sellpx(c, t, j), why)
+        if kind == 'X' and x_top and x_esc is not None and t > s0 and float(x_esc[t]) > float(x_esc[t - 1]):   # L-136：翻多時用可用資金把小部位補回原大小
+            Et = cash + sum(val(p, j, t - 1) for j, p in pos.items())
+            for j in sorted([j for j in pos if pos[j].get('u', 1.0) < 1.0 and not pos[j].get('dead')], key=lambda j: pos[j].get('u', 1.0)):
+                p = pos[j]
+                if cash <= 0 or not _buyable(c, t, j): continue
+                bp = Ov[t, j] * (1 + SLIP); need = Et / n - p['sh'] * Ov[t, j]
+                cost = min(need / (1 - FEE), cash)
+                if cost > 0: p['sh'] += cost * (1 - FEE) / bp; p['own'] += cost; cash -= cost
+                p['u'] = 1.0
         if buy:
             E = cash + sum(val(p, j, t - 1) for j, p in pos.items())
             for j in buy:
-                if j in pos or len(pos) >= n: continue
+                if j in pos: continue
+                if kind == 'X' and x_units and x_esc is not None:
+                    if sum(q.get('u', 1.0) for q in pos.values()) + float(x_esc[t]) > n + 1e-9: continue
+                elif len(pos) >= n: continue
                 if not _buyable(c, t, j): continue
                 sz = 1.0
                 if size is not None and kind == 'V':                     # L-122：V4.1 部位大小倍數（訊號日 t−1）
@@ -141,6 +153,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 p = dict(sh=own * (1 - FEE) / px, t0=t, px=px, own=own, E=E, st=False)
                 if kind == 'X':
                     d = c['ATRP'][t - 1, j] * 4; p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), x_dcap); p['hi'] = px
+                    if x_esc is not None: p['u'] = float(x_esc[t])
                     if xstop is not None and (xstop[2] is None or bool(_size(xstop[2])[t - 1, j])):   # L-125：替代出場（'hard'／'trail'，寬度 w）
                         p['xm'] = xstop[0]; p['d'] = xstop[1]
                 else:
@@ -196,6 +209,10 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 rr = sorted(live, key=lambda j: (CA[t, j] if np.isfinite(CA[t, j]) else 0) / pos[j]['px'])
                 for j in rr[:len(live) - n_t]: sell[j] = '空頭減碼'
         free = n_t - len(pos) + len(set(sell) & set(pos))
+        if kind == 'X' and x_units and x_esc is not None:              # L-136：名額以資金單位計（小部位只佔 0.2）
+            used = sum(pos[j].get('u', 1.0) for j in pos if j not in sell)
+            m_ = float(x_esc[t + 1]) if t + 1 < c['T'] else 1.0
+            free = int((n - used) / m_ + 1e-9) if m_ > 0 else 0
         if kind == 'X':
             g0 = c['below'][t] if gate is None else bool(gate[t])            # M-144：gate 可整條替換 X1 閘門
             gate_ = g0 and not (unlock is not None and unlock[t])            # M-109：unlock 窗口內解除 X1 閘門
