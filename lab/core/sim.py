@@ -146,6 +146,9 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 sz = 1.0
                 if size is not None and kind == 'V':                     # L-122：V4.1 部位大小倍數（訊號日 t−1）
                     sz = float(_size(size)[t - 1, j]); sz = 1.0 if not np.isfinite(sz) else sz
+                if kind == 'X' and xo.get('xsize') is not None:              # L-141：X 部位倍數（訊號日 t−1，npy 路徑）
+                    m_ = float(_size(xo['xsize'])[t - 1, j]); sz *= 1.0 if not np.isfinite(m_) else m_
+                    if sz <= 0: continue
                 if x_inv is not None and kind == 'X':                    # L-133：反 ATR 部位（全市場 ATR% 中位數 ÷ 個股 ATR%，限 lo–hi）
                     a_ = float(c['ATRP'][t - 1, j]); sz = 1.0 if not (np.isfinite(a_) and a_ > 0 and np.isfinite(_med[t - 1])) else min(max(_med[t - 1] / a_, x_inv[0]), x_inv[1])
                 px = Ov[t, j] * (1 + SLIP); own = min(E / n * sz * (float(x_scale[t]) if (kind == 'X' and x_scale is not None) else 1.0) * (float(x_esc[t]) if (kind == 'X' and x_esc is not None) else 1.0), cash)
