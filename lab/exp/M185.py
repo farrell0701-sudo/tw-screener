@@ -51,9 +51,9 @@ def main():
     D = pd.DataFrame(rows, columns=['era', 'pool', 'mc', 'atr', 'ind', 'e60', 'q10', 'q90'])
     D['L'] = D.e60 <= D.q10; D['Rt'] = D.e60 >= D.q90
     top = D[D.era == '2016–24/11'].ind.value_counts().head(10).index
-    D['indg'] = np.where(D.ind.isin(top), D.ind, '其他')
+    D['indg'] = np.where(D.ind.isin(top), D.ind, '前十以外')
     L = ['# M-185 結果：依市值、ATR%、產業細分的報酬集中（奇數代碼；60 日超額；2005–15｜2016–24/11）\n']
-    for key, nm, order in (('mc', '市值三分位', ['低', '中', '高']), ('atr', 'ATR% 三分位', ['低', '中', '高']), ('indg', '產業（前 10 大）', list(top) + ['其他'])):
+    for key, nm, order in (('mc', '市值三分位', ['低', '中', '高']), ('atr', 'ATR% 三分位', ['低', '中', '高']), ('indg', '產業（前 10 大）', list(top) + ['前十以外'])):
         L += [f'## {nm}\n', '| 子群 | 強勢池占比 | 營收池占比 | 強勢池 60 日（中位）左／右尾 | 營收池 60 日（中位）左／右尾 | 其餘 60 日 | 強勢池兩期同號 | 營收池兩期同號 |', '|---|---|---|---|---|---|---|---|']
         for g in order:
             cells = {}
