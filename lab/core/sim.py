@@ -90,7 +90,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
     cash = 1.0; pos = {}; sell, buy = {}, []; eq = np.full(c['T'], np.nan); ex = np.full(c['T'], np.nan); tr = []
     fix = c['fix']; bmode = delist[0] if isinstance(delist, tuple) else delist; disc = delist[1] if isinstance(delist, tuple) else 0.0
     xo = xopt or {}                                                   # L-133：X 帳戶選項（預設全部不啟用）
-    x_off = bool(xo.get('off')); x_dcap = float(xo.get('dcap', 0.15)); x_inv = xo.get('invatr'); x_slots = xo.get('slots'); x_scale = xo.get('scale'); x_esc = xo.get('escale'); x_top = bool(xo.get('topup')); x_units = bool(xo.get('units'))
+    x_off = bool(xo.get('off')); x_dcap = float(xo.get('dcap', 0.15)); x_inv = xo.get('invatr'); x_slots = xo.get('slots'); x_scale = xo.get('scale'); x_esc = xo.get('escale'); x_top = bool(xo.get('topup')); x_units = bool(xo.get('units')); x_cap = xo.get('cap')
     if x_inv is not None:
         with np.errstate(all='ignore'): _med = np.nanmedian(np.where(np.asarray(c['ATRP']) > 0, c['ATRP'], np.nan), axis=1)
 
@@ -149,6 +149,10 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 if x_inv is not None and kind == 'X':                    # L-133：反 ATR 部位（全市場 ATR% 中位數 ÷ 個股 ATR%，限 lo–hi）
                     a_ = float(c['ATRP'][t - 1, j]); sz = 1.0 if not (np.isfinite(a_) and a_ > 0 and np.isfinite(_med[t - 1])) else min(max(_med[t - 1] / a_, x_inv[0]), x_inv[1])
                 px = Ov[t, j] * (1 + SLIP); own = min(E / n * sz * (float(x_scale[t]) if (kind == 'X' and x_scale is not None) else 1.0) * (float(x_esc[t]) if (kind == 'X' and x_esc is not None) else 1.0), cash)
+                if kind == 'X' and x_cap is not None and float(x_cap[t]) < 1.0:   # L-137：總持股上限（不強迫賣，只限制新倉）
+                    room = float(x_cap[t]) * E - sum(val(q, k, t - 1) for k, q in pos.items())
+                    own = min(own, room)
+                    if own < 0.25 * E / n: continue
                 if own <= 0: break
                 p = dict(sh=own * (1 - FEE) / px, t0=t, px=px, own=own, E=E, st=False)
                 if kind == 'X':
