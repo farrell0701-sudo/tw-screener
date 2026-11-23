@@ -17,7 +17,7 @@ LS = (60, 20, 120)
 def main():
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     meta = P['meta']; keys = meta['security_key'].astype(str).to_numpy()
-    ind = fixed_industry(meta)[0].replace({'化學生技醫療': '生技醫療業', '金融業': '金融保險'}).astype(str).to_numpy()
+    ind = np.array([str(v) if isinstance(v, str) else '缺' for v in fixed_industry(meta)[0].astype(object).replace({'化學生技醫療': '生技醫療業', '金融業': '金融保險'})])
     odd = (meta['stock_id'].astype(str).str[-1].astype(int) % 2 == 1).to_numpy()
     S = signals.compute('fix', P=P, F=F); dbg = S['_dbg']; cols = dbg['cols']
     def full(a, fill):
