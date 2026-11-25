@@ -25,10 +25,6 @@ def main():
     out = ['# M-198 結果：空頭時兩池怎麼走（TAIEX 回落 ≥ 15% 事件；奇數代碼；到 2024-11-13）\n',
            '| 事件（前高 → 谷底） | 指數跌幅 | 下跌段 S｜A｜U | 前 1/3 段 S｜A｜U | 谷底後 60 日 S｜A｜U | 谷底後 120 日 S｜A｜U | 各自谷底相對指數（交易日）S｜A｜U |', '|---|---|---|---|---|---|---|']
     D = df.index
-    def r(k, a, b):
-        a = D[D.searchsorted(a)] if a in D or D.searchsorted(a) < len(D) else None
-        bi = min(D.searchsorted(b), len(D) - 1); ai = D.searchsorted(a)
-        return eq[k].iloc[bi] / eq[k].iloc[ai] - 1
     agg = []
     for a, b in ev:
         ai, bi = D.searchsorted(a), min(D.searchsorted(b), len(D) - 1)
