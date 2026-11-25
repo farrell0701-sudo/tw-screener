@@ -53,11 +53,12 @@ def build(parity=1):
             ex_open = OA[t + 2 + k, jj]; ex_open = np.where(np.isfinite(ex_open), ex_open, Cf[t + 2 + k, jj])
             exitp = np.where(any_, ex_open, Cf[t + 120, jj])
             net = exitp / ent - 1 - COST
+            net_ns = Cf[t + 120, jj] / ent - 1 - COST; net_ns60 = Cf[t + 60, jj] / ent - 1 - COST
         for i, j in enumerate(jj):
             rows.append(dict(t=t, q=q[i], has=has[i], pre=pre[i], r20=R20[t, j],
                              e20=CX[t + 20, j] - CX[t, j], e60=CX[t + 60, j] - CX[t, j], e120=CX[t + 120, j] - CX[t, j],
                              left=(CX[t + 60, j] - CX[t, j]) <= q10, right=(CX[t + 60, j] - CX[t, j]) >= q90,
-                             lo20=lo20[i], net=net[i], stop=bool(any_[i])))
+                             lo20=lo20[i], net=net[i], stop=bool(any_[i]), net_ns=net_ns[i], net_ns60=net_ns60[i]))
     D = pd.DataFrame(rows); D['date'] = dates[D.t.to_numpy()]
     return D
 
