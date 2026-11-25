@@ -13,13 +13,14 @@ from M107 import nw_t
 
 FE = ['DEPTH', 'DUR', 'RETR', 'VOLPB', 'ATRC', 'DTLD', 'EMA20D', 'EMA60D', 'CLV', 'MKT']
 CACHE = LAB / 'cache' / 'M197'
+TAG = 'M-197'
 
 
 def ffill_at(mask, val):
     return pd.DataFrame(np.where(mask, val, np.nan)).ffill().to_numpy()
 
 
-def build():
+def build(parity=1, a0=False):
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     signals.build('fix', mode='fix', P=P, F=F)
     S_ = signals.compute('fix', P=P, F=F); dbg = S_['_dbg']; cols = dbg['cols']
@@ -37,26 +38,37 @@ def build():
     Ush = np.vstack([np.zeros((1, N), bool), U[:-1]])
     with np.errstate(all='ignore'): ew = np.nan_to_num(np.nanmean(np.where(Ush, R, np.nan), axis=1))
     CX = np.cumsum(R - ew[:, None], axis=0)
-    odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == 1).to_numpy()
+    odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == parity).to_numpy()
     dT60 = Tr - np.vstack([np.full((60, N), np.nan), Tr[:-60]]); strong = pct_in(dT60, U) >= 0.9
     strong20 = pd.DataFrame(strong.astype(float)).rolling(20, min_periods=1).max().to_numpy() > 0
     H20 = Cdf.rolling(20, min_periods=15).max().to_numpy()
-    ishigh = (Cf >= H20 - 1e-12) & np.isfinite(Cf)
-    ar = np.broadcast_to(np.arange(T)[:, None], (T, N)).astype(float)
-    hidx = ffill_at(ishigh, ar); DUR = ar - hidx
-    L20b = Cdf.rolling(20, min_periods=15).min().to_numpy(); lowb = ffill_at(ishigh, L20b)
-    A20 = A.rolling(20, min_periods=15).mean().to_numpy(); a20h = ffill_at(ishigh, A20)
-    CS = A.cumsum().to_numpy(); csh = ffill_at(ishigh, CS)
-    atrh = ffill_at(ishigh, ATR); tldh = ffill_at(ishigh, Tr)
-    # 回檔低點（自高點以來最低收盤）
-    pl = np.full(N, np.nan); PL = np.full((T, N), np.nan)
-    for t in range(T):
-        c = Cf[t]; pl = np.where(ishigh[t] | np.isnan(pl), c, np.fmin(pl, c)); PL[t] = pl
+    # M-197B 修正：高點日＝近 20 日（含當日）最高收盤「最近一次出現」的那一天（原版以「當日為自身 20 日高」錨定，會錨到更早的高點）
+    from numpy.lib.stride_tricks import sliding_window_view
+    Cz = np.where(np.isfinite(Cf), Cf, -np.inf); hidx = np.full((T, N), -1, np.int64)
+    for s0 in range(19, T, 400):
+        e0 = min(T, s0 + 400); w = sliding_window_view(Cz[s0 - 19:e0], 20, axis=0)   # (e0-s0, N, 20)
+        last = 19 - np.argmax(w[:, :, ::-1], axis=2); hidx[s0:e0] = np.arange(s0, e0)[:, None] - 19 + last
+    hc = np.clip(hidx, 0, None); cj = np.broadcast_to(np.arange(N)[None, :], (T, N))
+    DUR = (np.arange(T)[:, None] - hidx).astype(float); DUR[hidx < 0] = np.nan
+    L20b = Cdf.rolling(20, min_periods=15).min().to_numpy(); lowb = L20b[hc, cj]
+    A20 = A.rolling(20, min_periods=15).mean().to_numpy(); a20h = A20[hc, cj]
+    CS = A.cumsum().to_numpy(); csh = CS[hc, cj]
+    atrh = ATR[hc, cj]; tldh = Tr[hc, cj]
+    # 回檔低點（自高點日之後到 t 的最低收盤；以 20 日滾動最小值近似於高點後區間）
+    PL = np.full((T, N), np.nan)
+    for t in range(20, T):
+        d = DUR[t]; ok = np.isfinite(d) & (d >= 1)
+        win = Cf[t - 19:t + 1]                                      # 20×N
+        mask = (np.arange(20)[:, None] >= (19 - d[None, :] + 1)) & ok[None, :]
+        PL[t] = np.where(ok, np.nanmin(np.where(mask, win, np.inf), axis=0), Cf[t])
     ema20 = Cdf.ewm(span=20, adjust=False, min_periods=20).mean().to_numpy(); ema60 = Cdf.ewm(span=60, adjust=False, min_periods=60).mean().to_numpy()
     mkt = ~M185.taiex_below(dates)
     t0 = dates.searchsorted(pd.Timestamp('2005-01-01')); t1 = dates.searchsorted(HOLDOUT)
-    rows = []
+    rows = []; A0r = []
     for t in range(t0, min(t1, T - 61), 3):
+        if a0 and (t - t0) % 15 == 0:
+            j0 = np.nonzero(U[t] & VALID[t] & odd & strong[t])[0]
+            if len(j0): A0r.append(pd.DataFrame(dict(t=t, e20=CX[t + 20, j0] - CX[t, j0])))
         st = U[t] & VALID[t] & odd & strong20[t] & ((H20[t] - Cf[t]) >= ATR[t]) & (DUR[t] >= 2)
         jj = np.nonzero(st)[0]
         if len(jj) == 0: continue
@@ -72,14 +84,18 @@ def build():
         ent = np.where(np.isfinite(OA[t + 1, jj]), OA[t + 1, jj], Cf[t + 1, jj])
         e60 = CX[t + 60, jj] - CX[t, jj]; q10 = np.nanpercentile(CX[t + 60, U[t]] - CX[t, U[t]], 10)
         rows.append(pd.DataFrame(dict(t=t, j=jj, e20=CX[t + 20, jj] - CX[t, jj], e60=e60, n20=Cf[t + 20, jj] / ent - 1 - COST,
-                                      res=(iu < idn).astype(float), fail=(idn < iu).astype(float), left=(e60 <= q10).astype(float), **f)))
+                                      res=(iu < idn).astype(float), fail=(idn < iu).astype(float), left=(e60 <= q10).astype(float), h=hidx[t, jj],
+                                      R5=Cf[t, jj] / Cf[t - 5, jj] - 1, R20=Cf[t, jj] / Cf[t - 20, jj] - 1, TLD=Tr[t, jj], **f)))
     D = pd.concat(rows, ignore_index=True); D['date'] = dates[D.t.to_numpy()]
-    return D[np.isfinite(D.e60) & np.isfinite(D.n20)]
+    D = D[np.isfinite(D.e60) & np.isfinite(D.n20)]
+    if a0:
+        A0 = pd.concat(A0r, ignore_index=True); A0['date'] = dates[A0.t.to_numpy()]; return D, A0
+    return D
 
 
 def main():
     CACHE.mkdir(parents=True, exist_ok=True)
-    D = build(); D.to_pickle(CACHE / 'D.pkl')
+    D = build(); D.to_pickle(CACHE / 'D.pkl') if TAG == 'M-197' else None
     L = ['# M-197 結果：強勢股回檔解剖學（奇數代碼、排除最近兩年；每 3 日取樣）\n',
          '恢復先到＝20 日內先收盤創 20 日新高，早於收盤跌破回檔低點 − 1ATR；20 日淨＝t+1 開盤進場扣 0.77%。\n']
     for era, lo, hi in ERAS:
