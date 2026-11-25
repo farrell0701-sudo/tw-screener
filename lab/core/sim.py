@@ -32,6 +32,7 @@ def make_ctx(mode='compat', P=None, F=None, S=None, sig=None, start=None):
     d = S['daily']
     ctx = dict(dates=dates, T=T_, N=N_, codes=M['security_key'].to_numpy(), fix=not md['bias3'],
                Ov=OA, CA=CA, Cf=Cf, VALID=VALID,
+               HA=np.asarray(F['HA'], np.float32), LA=np.asarray(F['LA'], np.float32),   # L-130：觸價單用
                RKX=np.asarray(S['RKX'], np.float32), RKV=np.asarray(S['RKV'], np.float32), ATRP=np.asarray(S['ATRP'], np.float32),
                below=d['below'].to_numpy(bool) | (d['xgate'].to_numpy(bool) if 'xgate' in d else False),   # L-117：X1 開倉閘門可併入 xgate
                MD=d['bear_mode'].to_numpy(bool), OFF=d['off'].to_numpy(bool),
@@ -82,7 +83,7 @@ def _size(path):
     return _SZ[path]
 
 
-def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None, xstop=None, pstop=None):
+def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None, xstop=None, pstop=None, ladder=None):
     """kind：'X'（X1）或 'V'（V4.1）。回傳（日報酬 Series、交易紀錄 list、持股比例 Series）。"""
     rng = np.random.default_rng(seed); dates = c['dates']; T_ = c['T'] if end is None else end
     s0 = c['s0'] + off; Ov, Cf, CA = c['Ov'], c['Cf'], c['CA']
@@ -92,7 +93,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
 
     def close(j, p, t, px, why):
         cash_in = p['sh'] * px * (1 - FEE - TAX)
-        tr.append((c['codes'][j], dates[p['t0']], dates[t], p['own'] / p['E'], cash_in / p['own'] - 1, t - p['t0'], why, p['st'], p.get('lk', False)))
+        tr.append((c['codes'][j], dates[p['t0']], dates[t], p['own'] / p['E'], (cash_in + p.get('got', 0.0)) / p['own'] - 1, t - p['t0'], why, p['st'], p.get('lk', False)))
         return cash_in
 
     def val(p, j, t):
@@ -129,8 +130,32 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                     if isinstance(vstop, tuple):                         # L-119：空頭停損寬度依 ATR（k × ATR%，限 lo–hi）
                         dv = c['ATRP'][t - 1, j] * vstop[0]; p['vd'] = vstop[1] if not np.isfinite(dv) else min(max(dv, vstop[1]), vstop[2])
                     else: p['vd'] = 0.05
+                    if ladder is not None:                               # L-130：V4.1 分批停利＋ATR 硬停損（觸價單）
+                        a = c['ATRP'][t - 1, j]; a = 0.02 if not np.isfinite(a) else float(a); b0 = float(Ov[t, j])
+                        p['L'] = dict(base=b0, atr=a * b0, stage=0, stop=b0 - ladder['stop'] * a * b0)
                 pos[j] = p; cash -= own
         sell, buy = keep, []
+        if ladder is not None and kind == 'V':                        # L-130：盤中觸價（同日先停損、後停利；跳空以開盤價成交）
+            sl = ladder.get('slip', SLIP)
+            for j in [j for j, p in pos.items() if 'L' in p and not p.get('dead')]:
+                if fix and not c['VALID'][t, j]: continue
+                p = pos[j]; L_ = p['L']; o, h, l = float(Ov[t, j]), float(c['HA'][t, j]), float(c['LA'][t, j])
+                if not (np.isfinite(o) and np.isfinite(h) and np.isfinite(l)): continue
+                lk = c['LD'][t, j]
+                if not lk and (o <= L_['stop'] or l <= L_['stop']):
+                    px = min(o, L_['stop']) * (1 - sl)
+                    pos.pop(j); cash += close(j, p, t, px, ('停損' if L_['stage'] == 0 else '保本') + f"@{L_['stage']}"); sell.pop(j, None); continue
+                done = False
+                while L_['stage'] < len(ladder['steps']):
+                    k, frac, nstop = ladder['steps'][L_['stage']]; lvl = L_['base'] + k * L_['atr']
+                    if h < lvl: break
+                    px = max(o, lvl) * (1 - sl); L_['stage'] += 1
+                    if frac >= 1.0:
+                        pos.pop(j); cash += close(j, p, t, px, f"停利@{L_['stage']}"); sell.pop(j, None); done = True; break
+                    sh = p['sh'] * frac; got = sh * px * (1 - FEE - TAX)
+                    p['sh'] -= sh; p['got'] = p.get('got', 0.0) + got; cash += got
+                    L_['stop'] = L_['base'] + nstop * L_['atr']
+                if done: continue
         if fix:                                                       # 最後有效日：下市出清（A）或凍結（B）
             for j in [j for j in pos if c['LAST'][j] == t and not pos[j].get('dead')]:
                 p = pos[j]; lk = bool(c['LD'][t, j]); p['lk'] = lk
@@ -166,6 +191,10 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 elif p['hi'] >= p['px'] * 1.06 and cc < p['px'] * 1.005: sell[j] = '保本'
                 elif 'tgt' in p and not p['ok'] and t - p['t0'] + 1 >= pstop[0]: sell[j] = '路徑停損'
                 elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
+            elif 'L' in p:
+                if c['OFF'][t] and t - p['t0'] >= 1: sell[j] = 'IAKF'
+                elif ladder.get('keep_time', True) and t - p['t0'] + 1 >= p['hold']: sell[j] = '持有期滿'
+                elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
             else:
                 if c['OFF'][t] and t - p['t0'] >= 1: sell[j] = 'IAKF'
                 elif vstop != 'none' and (c['MD'][t] or p['bear']) and cc < p['px'] * (1 - p.get('vd', 0.05)): sell[j] = '空頭5%停損'
@@ -190,8 +219,8 @@ def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=Non
     return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate, None, xstop, pstop)
 
 
-def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None, size=None):
-    return _run(c, 'V', off, seed, n, drop, 250, ban, delist, end, None, vstop, None, size)
+def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None, size=None, ladder=None):
+    return _run(c, 'V', off, seed, n, drop, 250, ban, delist, end, None, vstop, None, size, None, None, ladder)
 
 
 def mix(a, b, wa=0.6):
