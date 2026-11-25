@@ -31,7 +31,7 @@ def make_ctx(mode='compat', P=None, F=None, S=None, sig=None, start=None):
     Cf = pd.DataFrame(CA).ffill().values
     d = S['daily']
     ctx = dict(dates=dates, T=T_, N=N_, codes=M['security_key'].to_numpy(), fix=not md['bias3'],
-               Ov=OA, CA=CA, Cf=Cf, VALID=VALID,
+               Ov=OA, CA=CA, Cf=Cf, VALID=VALID, HA=np.asarray(F['HA'], np.float32),
                RKX=np.asarray(S['RKX'], np.float32), RKV=np.asarray(S['RKV'], np.float32), ATRP=np.asarray(S['ATRP'], np.float32),
                below=d['below'].to_numpy(bool) | (d['xgate'].to_numpy(bool) if 'xgate' in d else False),   # L-117：X1 開倉閘門可併入 xgate
                MD=d['bear_mode'].to_numpy(bool), OFF=d['off'].to_numpy(bool),
@@ -161,6 +161,8 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 if kind == 'X':
                     d = c['ATRP'][t - 1, j] * 4; p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), x_dcap); p['hi'] = px
                     if x_esc is not None: p['u'] = float(x_esc[t])
+                    if xo.get('tgt') is not None and (xo['tgt'][1] is None or bool(_size(xo['tgt'][1])[t - 1, j])):   # L-143：R 倍數停利（R = 初始停損寬度 d）
+                        p['tg'] = px * (1 + xo['tgt'][0] * p['d'])
                     if xstop is not None and (xstop[2] is None or bool(_size(xstop[2])[t - 1, j])):   # L-125：替代出場（'hard'／'trail'，寬度 w）
                         p['xm'] = xstop[0]; p['d'] = xstop[1]
                 else:
@@ -177,6 +179,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                     p['dead'] = True; p['val'] = CA[t, j] * (1 - disc); p['rel'] = c['REL'][j]
                 else:
                     pos.pop(j); cash += close(j, p, t, CA[t, j] * (1 - SLIP), '下市出清'); sell.pop(j, None)
+        _hit = {}
         mv_ = sum(val(p, j, t) for j, p in pos.items()); eq[t] = cash + mv_; ex[t] = mv_ / eq[t]
         for j, p in pos.items():
             if p.get('dead'): continue
@@ -191,6 +194,13 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
             cc = Cf[t, j] if not fix else CA[t, j]
             if np.isnan(cc): continue
             if kind == 'X':
+                if xo.get('xfix') is not None:                          # L-143：X 改固定持有 h 日（無停損）
+                    if t - p['t0'] + 1 >= int(xo['xfix']): sell[j] = '固定期滿'
+                    continue
+                if p.get('tg') is not None and j not in _hit:
+                    h_ = c['HA'][t, j]
+                    if np.isfinite(h_) and h_ >= p['tg'] and (t > p['t0'] or Ov[t, j] < p['tg']):
+                        _hit[j] = max(p['tg'], Ov[t, j]) if t > p['t0'] else p['tg']; continue
                 p['hi'] = max(p['hi'], cc)
                 if x_off and c['OFF'][t] and t - p['t0'] >= 1: sell[j] = 'IAKF'; continue
                 if p.get('xm') == 'hard':
@@ -208,6 +218,10 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 if c['OFF'][t] and t - p['t0'] >= 1: sell[j] = 'IAKF'
                 elif vstop != 'none' and (c['MD'][t] or p['bear']) and cc < p['px'] * (1 - p.get('vd', 0.05)): sell[j] = '空頭5%停損'
                 elif t - p['t0'] + 1 >= p['hold']: sell[j] = '持有期滿'
+        for j, hp in _hit.items():                                     # L-143：停利限價單當日成交（以目標價或跳空開盤價）
+            if j in pos and _sellable(c, t, j):
+                p = pos.pop(j); cash += close(j, p, t, hp, 'R停利'); sell.pop(j, None)
+                eq[t] = cash + sum(val(q, k, t) for k, q in pos.items())
         n_t = n
         if kind == 'X' and x_slots is not None:                       # L-133：空頭時可持有檔數上限，超過者依進場以來報酬由低到高減碼
             n_t = min(n, int(x_slots[t]))
