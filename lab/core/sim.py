@@ -82,7 +82,7 @@ def _size(path):
     return _SZ[path]
 
 
-def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None, xstop=None):
+def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, vstop=None, gate=None, size=None, xstop=None, pstop=None):
     """kind：'X'（X1）或 'V'（V4.1）。回傳（日報酬 Series、交易紀錄 list、持股比例 Series）。"""
     rng = np.random.default_rng(seed); dates = c['dates']; T_ = c['T'] if end is None else end
     s0 = c['s0'] + off; Ov, Cf, CA = c['Ov'], c['Cf'], c['CA']
@@ -120,6 +120,8 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 p = dict(sh=own * (1 - FEE) / px, t0=t, px=px, own=own, E=E, st=False)
                 if kind == 'X':
                     d = c['ATRP'][t - 1, j] * 4; p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), 0.15); p['hi'] = px
+                    if pstop is not None:                                 # L-129：路徑停損（N 日內收盤未達進場 × (1 + k × ATR%) → 出場）
+                        a = c['ATRP'][t - 1, j]; p['tgt'] = px * (1 + pstop[1] * (a if np.isfinite(a) else 0.02)); p['ok'] = False
                     if xstop is not None and (xstop[2] is None or bool(_size(xstop[2])[t - 1, j])):   # L-125：替代出場（'hard'／'trail'，寬度 w）
                         p['xm'] = xstop[0]; p['d'] = xstop[1]
                 else:
@@ -159,8 +161,10 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                     if cc < p['hi'] * (1 - p['d']): sell[j] = '移動停損'
                     elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
                     continue
+                if 'tgt' in p and cc >= p['tgt']: p['ok'] = True
                 if cc < p['hi'] * (1 - p['d']): sell[j] = '移動停損'
                 elif p['hi'] >= p['px'] * 1.06 and cc < p['px'] * 1.005: sell[j] = '保本'
+                elif 'tgt' in p and not p['ok'] and t - p['t0'] + 1 >= pstop[0]: sell[j] = '路徑停損'
                 elif t - p['t0'] + 1 >= cap: sell[j] = '250日上限'
             else:
                 if c['OFF'][t] and t - p['t0'] >= 1: sell[j] = 'IAKF'
@@ -182,8 +186,8 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
     return (pd.Series(eq, index=dates).dropna().pct_change().fillna(0), tr, pd.Series(ex, index=dates).dropna())
 
 
-def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None, xstop=None):
-    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate, None, xstop)
+def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None, xstop=None, pstop=None):
+    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate, None, xstop, pstop)
 
 
 def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None, size=None):
