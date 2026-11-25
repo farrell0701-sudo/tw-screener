@@ -14,7 +14,7 @@ ERAS = (('2005–15', '2005-01-01', '2015-12-31'), ('2016–26', '2016-01-01', '
 COST = 0.0077
 
 
-def build():
+def build(parity=1):
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     S = signals.compute('fix', P=P, F=F); U = S['_dbg']['U']; del S
     Cf = pd.DataFrame(np.asarray(F['CA'], np.float64)).ffill().to_numpy(); LA = np.asarray(F['LA'], np.float64)
@@ -25,7 +25,7 @@ def build():
     with np.errstate(all='ignore'): ew = np.nan_to_num(np.nanmean(np.where(Ush, R, np.nan), axis=1))
     XRv = np.where(VALID, R - ew[:, None], np.nan); CX = np.cumsum(R - ew[:, None], axis=0)
     keys = P['meta']['security_key'].astype(str).to_numpy()
-    odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == 1).to_numpy()
+    odd = (P['meta']['stock_id'].astype(str).str[-1].astype(int) % 2 == parity).to_numpy()
     R6 = M180.r6_factors()['R6 營收短長比']; jmap = pd.Index(R6.columns.astype(str)).get_indexer(keys)
     ds = pd.Series(dates, index=dates); samp = ds[ds.dt.day > 10].groupby(ds[ds.dt.day > 10].dt.to_period('M')).min()
     samp = [dates.get_loc(d) for d in samp if d >= pd.Timestamp('2005-01-01') and dates.get_loc(d) + 122 < T]
