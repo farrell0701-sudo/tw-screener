@@ -159,7 +159,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 if own <= 0: break
                 p = dict(sh=own * (1 - FEE) / px, t0=t, px=px, own=own, E=E, st=False)
                 if kind == 'X':
-                    d = c['ATRP'][t - 1, j] * 4; p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), x_dcap); p['hi'] = px
+                    d = c['ATRP'][t - 1, j] * float(xo.get('k', 4)); p['d'] = 0.04 if not np.isfinite(d) else min(max(d, 0.04), x_dcap); p['hi'] = px   # L-144：xopt['k'] 可改 ATR 倍數
                     if x_esc is not None: p['u'] = float(x_esc[t])
                     if xo.get('tgt') is not None and (xo['tgt'][1] is None or bool(_size(xo['tgt'][1])[t - 1, j])):   # L-143：R 倍數停利（R = 初始停損寬度 d）
                         p['tg'] = px * (1 + xo['tgt'][0] * p['d'])
