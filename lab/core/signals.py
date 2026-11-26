@@ -32,7 +32,7 @@ RULES = dict(
     x_hot=True, hot_q=0.80,                    # 剔過熱：20 日漲幅池內前 20%
     x_steep=True, steep_up=0.05, steep_q=0.80, # 剔最陡：S60 ≥ 5% 者中前 20%
     x_rank='both',                             # both＝½T_ld＋½ΔT_ld10；tld；dtld；random
-    x_rev=None,                                # L-123：(kind, n, key)＝營收排序；kind 'tier'＝營收池內百分位分 n 層先排、同層依 SCX；'ew'＝½營收＋½SCX；key＝EXTRA 中的日資料清單（多個則池內百分位平均）；None＝不用
+    x_rev=None,                                # L-123：(kind, n, key)＝營收排序；kind 'w'＝n×外部＋(1−n)×SCX（L-152）；'tier'＝營收池內百分位分 n 層先排、同層依 SCX；'ew'＝½營收＋½SCX；key＝EXTRA 中的日資料清單（多個則池內百分位平均）；None＝不用
     x_dvs=None,                                # L-108P：(W, q)＝剔除強勢池內下檔波動占比最高的 q；None＝不剔
     x_crowd=None,                              # L-114：(W, q)＝剔除強勢池內投機擁擠（½ 週轉率 W 日＋½ 融資使用率，池內百分位）最高的 q；None＝不剔
     v_bearstop=None,   # L-115：(MA, 例外)＝空頭閘門（指數 < MA 日均線，例外＝True 時排除廣度爆發後 20 日）當日 V4.1 訊號作廢；None＝不作廢
@@ -104,6 +104,7 @@ def compute(mode='compat', P=None, F=None, **sw):
         hasr = np.isfinite(rv); rv = np.where(hasr, rv, 0.5)      # 缺值＝中性
         if kind == 'tier': SCX = np.clip(np.ceil(rv * nt), 1, nt) + 0.999 * SCX
         elif kind == 'ew': SCX = 0.5 * rv + 0.5 * SCX
+        elif kind == 'w': SCX = nt * rv + (1 - nt) * SCX               # L-152：權重 nt 的加權排序
         elif kind == 'filter': revok = ~(hasr & (rv < nt))         # L-124：剔除 r < q（缺值保留）
         elif kind == 'prio': SCX = (hasr & (rv >= nt)).astype(float) + 0.999 * SCX   # L-124：r ≥ q 者先排
         else: raise ValueError(kind)
