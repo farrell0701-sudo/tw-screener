@@ -114,7 +114,7 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
                 if j in pos or len(pos) >= n: continue
                 if not _buyable(c, t, j): continue
                 sz = 1.0
-                if size is not None and kind == 'V':                     # L-122：V4.1 部位大小倍數（訊號日 t−1）
+                if size is not None:                                     # L-122：V4.1 部位大小倍數（訊號日 t−1）；L-153：X1 亦可
                     sz = float(_size(size)[t - 1, j]); sz = 1.0 if not np.isfinite(sz) else sz
                 px = Ov[t, j] * (1 + SLIP); own = min(E / n * sz, cash)
                 if own <= 0: break
@@ -215,8 +215,8 @@ def _run(c, kind, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', e
     return (pd.Series(eq, index=dates).dropna().pct_change().fillna(0), tr, pd.Series(ex, index=dates).dropna())
 
 
-def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None, xstop=None, pstop=None):
-    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate, None, xstop, pstop)
+def runX(c, off=0, seed=0, n=6, drop=0.2, cap=250, ban=None, delist='A', end=None, unlock=None, gate=None, xstop=None, pstop=None, size=None):
+    return _run(c, 'X', off, seed, n, drop, cap, ban, delist, end, unlock, None, gate, size, xstop, pstop)
 
 
 def runV(c, off=0, seed=0, n=4, drop=0.2, ban=None, delist='A', end=None, vstop=None, size=None, ladder=None):
