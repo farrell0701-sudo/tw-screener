@@ -15,7 +15,8 @@ from M107 import nw_t
 FAC = ['T_ld', 'ΔT10', 'ΔT60', 'R1', 'R4', 'R5', 'R6', 'VC', 'VX', 'EXT', 'POS250']
 
 
-def panel(parity):
+def panel(parity, extra=None, fac=None):
+    fac = fac or FAC
     P = load_panel(); F = load_feat('AF'); dates = P['dates']; T, N = P['C'].shape
     signals.build('fix', mode='fix', P=P, F=F)
     S_ = signals.compute('fix', P=P, F=F); dbg = S_['_dbg']; cols = dbg['cols']
@@ -41,6 +42,7 @@ def panel(parity):
           'R1': daily_from_monthly(rv['R1 單月年增'], dates, keys), 'R4': daily_from_monthly(rv['R4 營收創高'], dates, keys),
           'R5': daily_from_monthly(rv['R5 年增驚喜'], dates, keys), 'R6': daily_from_monthly(r6, dates, keys),
           'VC': FE['VC'], 'VX': FE['VX'], 'EXT': FE['EXT'], 'POS250': FE['POS250']}
+    if extra: FD.update(extra(P, F, Tr, U))
     t0 = dates.searchsorted(pd.Timestamp('2005-01-01')); t1 = min(dates.searchsorted(HOLDOUT), T - 62)
     out = {}
     for nm, RK, gate, step in (('X1 候選', RKX, below, 5), ('V4.1 訊號', RKV, off, 1)):
@@ -51,14 +53,15 @@ def panel(parity):
             if len(jj) == 0: continue
             ent = np.where(np.isfinite(OA[t + 1, jj]), OA[t + 1, jj], Cf[t + 1, jj])
             d = dict(t=t, j=jj, S=-RK[t, jj], e20=CX[t + 20, jj] - CX[t, jj], e60=CX[t + 60, jj] - CX[t, jj], n20=Cf[t + 20, jj] / ent - 1 - COST)
-            for f in FAC: d[f] = np.asarray(FD[f][t, jj], np.float64)
+            for f in fac: d[f] = np.asarray(FD[f][t, jj], np.float64)
             rows.append(pd.DataFrame(d))
         D = pd.concat(rows, ignore_index=True); D['date'] = dates[D.t.to_numpy()]
         out[nm] = D[np.isfinite(D.e60)]
     return out
 
 
-def analyze(out, title):
+def analyze(out, title, fac=None):
+    FAC_ = fac or FAC
     L = [f'# {title}\n']; nomin = []
     for nm, D in out.items():
         grp = 't' if nm.startswith('X1') else 'm'
@@ -66,12 +69,12 @@ def analyze(out, title):
         for era, lo, hi in ERAS:
             E = D[(D.date >= lo) & (D.date <= hi)].copy()
             L += [f"## {nm}｜{era}（{len(E):,} 筆、{E[grp].nunique()} 組；20 日淨勝率 {(E.n20 > 0).mean():.0%}）\n"]
-            cm = E[['S'] + FAC].rank().corr()
-            L.append('與 S（X1／V4.1 自身排序）的 Spearman：' + '；'.join(f'{f} {cm.loc["S", f]:+.2f}' for f in FAC))
-            hi_pairs = [(a, b, cm.loc[a, b]) for i, a in enumerate(FAC) for b in FAC[i + 1:] if abs(cm.loc[a, b]) >= 0.4]
+            cm = E[['S'] + FAC_].rank().corr()
+            L.append('與 S（X1／V4.1 自身排序）的 Spearman：' + '；'.join(f'{f} {cm.loc["S", f]:+.2f}' for f in FAC_))
+            hi_pairs = [(a, b, cm.loc[a, b]) for i, a in enumerate(FAC_) for b in FAC_[i + 1:] if abs(cm.loc[a, b]) >= 0.4]
             L.append('因子間 |ρ| ≥ 0.4：' + ('；'.join(f'{a}–{b} {c:+.2f}' for a, b, c in hi_pairs) or '無') + '\n')
             L += ['| 因子 | 覆蓋 | IC20（t） | IC60（t） | 增量 IC20（t） | 增量 IC60（t） | 殘差前20% 20日淨勝率 | 殘差後20% 20日淨勝率 |', '|---|---|---|---|---|---|---|---|']
-            for f in FAC:
+            for f in FAC_:
                 x = E.dropna(subset=[f]).copy()
                 if len(x) < 200: L.append(f'| {f} | {len(x) / len(E):.0%} | 樣本不足 | | | | | |'); continue
                 def ric(g, y, col):
