@@ -10,7 +10,7 @@ from chips import _staged, to_grid
 from M107 import nw_t
 
 RF = 0.01
-ERAS = (('2005–15', '2005-01-01', '2015-12-31'), ('2016–26', '2016-01-01', '2026-12-31'))
+ERAS = (('2005–15', '2005-01-01', '2015-12-31'), ('2016–26', '2016-01-01', '2026-12-31'), ('2016–24.10（排除近兩年）', '2016-01-01', '2024-10-31'))
 FN = ['MKT', 'SMB', 'HML', 'UMD', 'LVOL']
 
 
@@ -92,7 +92,7 @@ def main():
     for nm in ('fix_merge', 'fix_X', 'fix_V'):
         s = pd.Series(z['values'][:, names.index(nm)].astype(np.float64), index=sd)
         sm = monthly(s) - RF / 12
-        L += [f'## {nm}\n', '| 期間 | 月數 | 年化超額 | alpha 年化（t） | ' + ' | '.join(f'β {k}（t）' for k in FN) + ' | R² | 單因子 alpha（t）｜β |', '|---|' * (6 + len(FN)) + '|']
+        L += [f'## {nm}\n', '| 期間 | 月數 | 年化超額 | alpha 年化（t） | ' + ' | '.join(f'β {k}（t）' for k in FN) + ' | R² | 單因子 alpha（t）｜β |', '|' + '---|' * (6 + len(FN))]
         C2 = ['', '各因子貢獻（β×因子年化平均）：']
         for era, lo, hi in ERAS:
             J = pd.concat([sm.rename('y'), Fm], axis=1).dropna()
